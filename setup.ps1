@@ -58,8 +58,11 @@ Write-Host '3. Click the extension icon > Open station. Open your APEX inventory
 Write-Host 'Temporary add-ons require reloading after restarting Firefox. This cannot be bypassed by this installer.'
 try {
   $firefox = Get-Command firefox -ErrorAction SilentlyContinue
-  if ($firefox) { Start-Process $firefox.Source 'about:debugging#/runtime/this-firefox' }
-  else { Start-Process 'about:debugging#/runtime/this-firefox' -ErrorAction SilentlyContinue }
-} catch { }
+  if ($firefox) { $firefoxPath = $firefox.Source }
+  elseif (Test-Path "${env:ProgramFiles}\Mozilla Firefox\firefox.exe") { $firefoxPath = "${env:ProgramFiles}\Mozilla Firefox\firefox.exe" }
+  elseif (Test-Path "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe") { $firefoxPath = "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe" }
+  else { $firefoxPath = $null }
+  if ($firefoxPath) { Start-Process -FilePath $firefoxPath -ArgumentList 'about:debugging#/runtime/this-firefox' }
+} catch { Write-Host 'Open about:debugging in Firefox manually.' }
 Start-Process explorer.exe -ArgumentList (Join-Path $root 'extension')
 Write-Host "`nSetup complete. Keep this folder in place." -ForegroundColor Green

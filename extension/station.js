@@ -42,7 +42,7 @@ async function connect(){
   try{
     const r=await send({action:'connect',tabId:t.id});connected=true;
     $('auditInfo').textContent=`${r.total} rows loaded · ${r.indexed} with serials · ${r.notAudited} not audited. ${r.note}`;
-    setPaused(false);notice('','Official site connected','Scanning can begin. Pending captures will be submitted.');await reloadQueue();
+    await reloadQueue();setPaused(false);notice('','Official site connected','Scanning can begin. Pending captures will be submitted.');
   }catch(e){connected=false;notice('error','Cannot connect to APEX',e.message);setPaused(true);}
   finally{$('connect').disabled=false;focusInput();}
 }

@@ -141,7 +141,8 @@ async function apexWork(command){
     if(document.querySelector('#P4_COUNTED_SERIAL'))document.querySelector('#P4_COUNTED_SERIAL').value='';
     apex.item('P4_SELECT_SERIAL').setValue(serial,null,true);
     apex.jQuery(input).trigger(apex.jQuery.Event('keypress',{key:'Enter',which:13,keyCode:13}));
-    const deadline=Date.now()+18000;
+    const started=Date.now(), deadline=started+18000;
+    let nextFullRead=started+2300;
     while(Date.now()<deadline){
       await sleep(450);
       const code=String(document.querySelector('#P4_COUNTED_SERIAL')?.value||'');
@@ -154,6 +155,17 @@ async function apexWork(command){
       if(candidate.length===1 && /staged for audit/i.test(candidate[0].status)){
         state.rows=state.rows.map(r=>r.id===existing.id?{...r,status:'Staged for Audit'}:r);state.at=Date.now();
         return {ok:true,outcome:'audited',message:'Confirmed by official grid.'};
+      }
+      // Some APEX reports show only the first page after a refresh. Reindex
+      // earlier instead of wasting the full 18-second verification window.
+      if(Date.now()>=nextFullRead){
+        try{
+          const full=await allRows();state.rows=full.rows;state.at=Date.now();
+          const match=full.rows.filter(r=>r.serials.includes(serial));
+          if(match.length===1 && /staged for audit/i.test(match[0].status))
+            return {ok:true,outcome:'audited',message:'Verified in refreshed audit index.'};
+        }catch(_){}
+        nextFullRead=Date.now()+4500;
       }
     }
     // Site may refresh to a paginated first page. One complete read to verify.
