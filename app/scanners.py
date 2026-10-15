@@ -27,6 +27,9 @@ if os.name=='nt':
     class HEADER(C.Structure):_fields_=[('kind',W.DWORD),('size',W.DWORD),('device',W.HANDLE),('wparam',WPARAM)]
     class KEY(C.Structure):_fields_=[('make',W.USHORT),('flags',W.USHORT),('reserved',W.USHORT),('vk',W.USHORT),('message',W.UINT),('extra',W.ULONG)]
     class WC(C.Structure):_fields_=[('style',W.UINT),('proc',PROC),('clsExtra',C.c_int),('wndExtra',C.c_int),('instance',W.HINSTANCE),('icon',W.HICON),('cursor',W.HANDLE),('background',W.HBRUSH),('menu',W.LPCWSTR),('name',W.LPCWSTR)]
+    U.GetRawInputDeviceList.restype=W.UINT
+    U.GetRawInputDeviceInfoW.restype=W.UINT
+    U.GetRawInputData.restype=W.UINT
     U.GetRawInputDeviceList.argtypes=[C.POINTER(DEV),C.POINTER(W.UINT),W.UINT]
     U.GetRawInputDeviceInfoW.argtypes=[W.HANDLE,W.UINT,C.c_void_p,C.POINTER(W.UINT)]
     U.GetRawInputData.argtypes=[W.HANDLE,W.UINT,C.c_void_p,C.POINTER(W.UINT),W.UINT]

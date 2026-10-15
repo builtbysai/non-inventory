@@ -6,7 +6,7 @@ Windows-first barcode scanning for SPA1 missing-inventory investigation and the 
 
 ## Install on Windows
 
-1. Download [the release ZIP](https://github.com/builtbysai/non-inventory/releases/latest), extract everything to a permanent local folder such as `C:\Tools\Non-Inventory`.
+1. Download [the install ZIP](https://github.com/builtbysai/non-inventory/blob/main/downloads/non-inventory-2.0.0.zip?raw=true), extract everything to a permanent local folder such as `C:\Tools\Non-Inventory`.
 2. Double-click **SETUP.cmd**. Or run `.\SETUP.cmd` in a terminal. It installs Python 3.13 if needed using winget, creates an isolated environment, installs the COM driver library, checks your CSVs, registers Firefox native messaging under your Windows account, and creates a desktop launcher. No admin rights normally needed. Internet is needed only for initial dependency installation.
 3. Copy **all original monthly investigation CSVs** into `workspace\`. No renaming required. Each needs `Serial Number`, `Asset ID`, `Status`, `Found By`, `Found Date`. Additional fields remain intact. Optional `audit-export-reference.csv` can contain `Item Number(LOV)` for product-code rejection and `Serial Number` / `Asset ID` for reference matching. Keep CSVs closed in Excel during scanning.
 4. Firefox → `about:debugging` → **This Firefox** → **Load Temporary Add-on** → choose `extension\manifest.json`. Click its toolbar icon → **Open station**. Temporary installation must be repeated after Firefox restarts. The included XPI is **unsigned**; permanent normal Firefox installation requires [Mozilla signing](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/). No signing credentials are supplied, so this release does not pretend to be permanently installable.
@@ -45,3 +45,6 @@ python tools/package.py
 ```
 
 Only COM mode needs `pyserial==3.5`; all other companion code uses Python's standard library. Python 3.10+, Firefox 128+, Windows 10/11. Development checks run on Linux; CI also validates on Windows. Release packaging uses a source allowlist and never includes inventory files, the virtual environment, generated launchers, journals, credentials, or backups. All `workspace` contents except `.gitkeep` are Git-ignored. Store this folder on your approved encrypted company computer; it contains your inventory and login locally.
+
+
+Build status: local Python and simulated-browser validation passed. The initial GitHub Actions run failed before a runner executed any steps, so Windows CI is unverified. The source-only install ZIP is available under `downloads/` independently of Actions. Its SHA-256 checksums are beside it. Future successful CI runs can also publish a tagged GitHub release.

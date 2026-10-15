@@ -3,3 +3,5 @@ Windows-first scanner companion and Firefox extension with journal-first capture
 Download and extract **non-inventory-2.0.0.zip**, then run **SETUP.cmd**. All release artifacts contain source only; bring your original company CSVs locally. The separate XPI is **unsigned**; use Firefox temporary extension installation until the owner completes Mozilla signing.
 
 Validated with synthetic CSVs and simulated APEX responses. **Physical scanner operation and authenticated company APEX behavior require controlled live verification** as documented in `docs/LIVE-VERIFICATION.md`. No company inventory, employee data, credentials, or session journal is included.
+
+Local checks passed. Initial GitHub Actions jobs failed/cancelled before any runner steps, so Windows CI is not verified. The install ZIP and checksums are published in the private repository downloads directory as well as the local build output.
