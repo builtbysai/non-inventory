@@ -1,0 +1,11 @@
+# PRIVATE WORKPLACE DATA. Never commit personal or company inventory data.
+workspace/**
+!workspace/.gitkeep
+*.zip
+*.xpi
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+app/native_launcher.bat
+app/non_inventory_host.json

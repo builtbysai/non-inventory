@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Non Inventory / Scan Station</title><link rel="stylesheet" href="station.css"></head>
+<body><div class="app">
+<header class="mast"><div><span class="kicker">FIELD IT / SPA1</span><h1>Inventory scan station<span class="v">01</span></h1></div><div class="topright"><span id="state" class="state" role="status">Checking local engine</span><button id="pause" class="small">Pause <kbd>F9</kbd></button></div></header>
+<main class="grid"><section class="station" aria-labelledby="sectionTitle">
+  <div class="section-line"><h2 id="sectionTitle">Live scanning</h2><span id="modeText">Local input</span></div>
+  <label for="serial" class="scanlabel">READY FOR BARCODE</label>
+  <div class="scan-wrap"><span aria-hidden="true" class="target">└</span><input id="serial" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-describedby="scannerHint" placeholder="Scan serial · Enter" autofocus><span aria-hidden="true" class="target">┘</span></div>
+  <p id="scannerHint" class="hint">USB handheld scanner. Enter suffix recommended. F8 returns focus here. Scans save locally before the official site is updated.</p>
+  <div id="result" class="result" role="status" aria-live="polite"><span id="symbol" class="symbol">●</span><div><strong id="resultTitle">Ready</strong><p id="resultMessage">Connect the official audit in the right panel, then start scanning.</p></div></div>
+  <div class="numbers" aria-label="Session totals"><div><strong id="countScanned">0</strong><span>Captured</span></div><div><strong id="countFound">0</strong><span>Unique missing found</span></div><div><strong id="countAudited">0</strong><span>Confirmed audited</span></div><div><strong id="countQueued">0</strong><span>Audit pending</span></div></div>
+  <div class="section-line loghead"><h2>Recent activity</h2><span>Newest first</span></div>
+  <ol id="activity" class="activity"><li>No scans yet.</li></ol>
+</section><aside class="side"><h2>Setup & controls</h2>
+  <label class="setting-label" for="login">Technician login</label><input type="text" id="login" maxlength="80" autocomplete="username" placeholder="Enter your login">
+  <label class="setting-label" for="tabs">Inventory browser tab</label><div class="tabrow"><select id="tabs" aria-label="Official inventory tab"></select><button id="refresh" title="Refresh browser tabs" aria-label="Refresh browser tabs">↻</button></div>
+  <button class="primary" id="connect">Connect official audit</button><p id="auditInfo" class="help">Open your company's Field IT Audit Count page in Firefox and select SPA1.</p>
+  <div class="rule"></div>
+  <label class="toggle"><input id="csvOnly" type="checkbox"> <span>Investigation only (do not update official audit)</span></label>
+  <label class="toggle"><input id="voice" type="checkbox" checked> <span>Voice and audio feedback</span></label>
+  <div class="rule"></div><h3>Original investigation files</h3><div id="files" class="files">Checking files…</div>
+  <p class="help">Found date and login update immediately. Files, backups and the recovery journal remain on this computer.</p>
+  <div class="rule"></div><div class="reviewbuttons"><button id="review">Found items / Edit details</button><button id="exceptions">Pending & exceptions</button></div>
+</aside></main>
+<footer><span>OFFLINE CAPTURE / OFFICIAL SITE VIA AUTHENTICATED FIREFOX TAB</span><span id="footer">Initializing…</span></footer></div>
+<dialog id="dialog"><div class="dialogtop"><h2 id="dialogTitle">Review</h2><button id="close" aria-label="Close dialog">Close</button></div><div id="dialogBody"></div></dialog>
+<script src="station.js"></script></body></html>
