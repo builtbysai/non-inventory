@@ -1,2 +1,2 @@
 306edc5698b73ece763a830bffeab052a1c6f96ee9c91b8a7b2d60e0b0f1618a  non-inventory-2.0.0-unsigned.xpi
-7d1cf7f05bb36e802328274ada31ead42695e7ed6ddacbf08e5e7700baee0215  non-inventory-2.0.0.zip
+8cbedd700f74f1d68e29086c06aaa268a86771540425d6a3a8596db3e373c65b  non-inventory-2.0.0.zip
