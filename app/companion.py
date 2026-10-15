@@ -15,6 +15,16 @@ def start():
     flags=subprocess.DETACHED_PROCESS|subprocess.CREATE_NEW_PROCESS_GROUP|subprocess.CREATE_NO_WINDOW
     subprocess.Popen([sys.executable,str(Path(__file__).resolve())],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
 
+def publish_health(workspace,status):
+    """Telemetry contention must never stop capture or CSV processing on Windows."""
+    try:
+        temp=workspace/'companion-health.tmp'
+        temp.write_text(json.dumps(status),encoding='utf-8')
+        os.replace(temp,workspace/'companion-health.json')
+        return True
+    except OSError:
+        return False  # A reader/antivirus may briefly deny replacement; retry next tick.
+
 def run():
     ledger=Ledger(ROOT)
     lock=(ledger.workspace/'companion.lock').open('a+b')
@@ -28,11 +38,11 @@ def run():
     except OSError:return
     stop=threading.Event();health_state={'input':'Starting'}
     def health(message):health_state['input']=message
-    def capture(raw):
+    def capture(raw,source):
         try:
             cfg=ledger.config()
-            if not cfg.get('capture_enabled',True):return
-            ledger.capture(raw,cfg.get('username',''),cfg.get('input_mode','device'))
+            if not cfg.get('capture_enabled',True) or cfg.get('input_mode')!=source:return
+            ledger.capture(raw,cfg.get('username',''),source)
             if os.name=='nt':
                 import winsound
                 winsound.PlaySound('SystemAsterisk',winsound.SND_ALIAS|winsound.SND_ASYNC)
@@ -46,14 +56,14 @@ def run():
         if time.monotonic()-cached['at']>.5:
             cached['config']=ledger.config();cached['at']=time.monotonic()
         return cached['config']
-    threading.Thread(target=raw_input,args=(get_config,capture,health),daemon=True).start()
-    threading.Thread(target=serial_loop,args=(ledger.config,capture,health,stop),daemon=True).start()
+    threading.Thread(target=raw_input,args=(get_config,lambda raw:capture(raw,'hid'),health),daemon=True).start()
+    threading.Thread(target=serial_loop,args=(ledger.config,lambda raw:capture(raw,'com'),health,stop),daemon=True).start()
     try:
         while True:
             try:ledger.process(40)
             except Exception as e:health_state['worker']=str(e)
             status={'at':now(),**health_state,'pid':os.getpid()}
-            temp=ledger.workspace/'companion-health.tmp';temp.write_text(json.dumps(status),encoding='utf-8');os.replace(temp,ledger.workspace/'companion-health.json')
+            publish_health(ledger.workspace,status)
             time.sleep(.2)
     except KeyboardInterrupt:stop.set()
 if __name__=='__main__':run()

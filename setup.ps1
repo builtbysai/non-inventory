@@ -1,3 +1,4 @@
+param([switch]$NoLaunch, [switch]$NoShortcut)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 Write-Host 'Non-Inventory / Windows setup' -ForegroundColor Cyan
@@ -6,7 +7,7 @@ function Find-Python {
   foreach ($name in @('py','python')) {
     try {
       $command = Get-Command $name -ErrorAction Stop
-      $arguments = @('-c','import sys; print(sys.executable if sys.version_info >= (3,10) else "")')
+      $arguments = @('-c','import sys; sys.exit(1) if sys.version_info < (3,10) else print(sys.executable)')
       if ($name -eq 'py') { $arguments = @('-3') + $arguments }
       $exe = (& $command.Source @arguments 2>$null | Select-Object -First 1)
       if ($exe -and (Test-Path $exe.Trim())) { return $exe.Trim() }
@@ -36,7 +37,7 @@ if ($LASTEXITCODE -ne 0) { throw 'CSV preflight failed. Fix headers before enabl
 $utf8 = New-Object Text.UTF8Encoding($false)
 $launcher = Join-Path $root 'app\native_launcher.bat'
 $nativeScript = Join-Path $root 'app\native_host.py'
-[IO.File]::WriteAllText($launcher,"@echo off`r`nchcp 65001 >nul`r`n`"$python`" -u `"$nativeScript`"`r`n",$utf8)
+[IO.File]::WriteAllText($launcher,"@echo off`r`nchcp 65001 >nul`r`n`"$python`" -u `"$nativeScript`" %*`r`n",$utf8)
 $manifestPath = Join-Path $root 'app\non_inventory_host.json'
 $manifest = @{name='non_inventory_host';description='Non-Inventory local companion';path=$launcher;type='stdio';allowed_extensions=@('non-inventory@builtbysai.com')} | ConvertTo-Json
 [IO.File]::WriteAllText($manifestPath,$manifest,$utf8)
@@ -46,14 +47,16 @@ Set-Item -Path $key -Value $manifestPath
 $companion = Join-Path $root 'app\companion.py'
 $startLauncher = Join-Path $root 'app\start_companion.cmd'
 [IO.File]::WriteAllText($startLauncher,"@echo off`r`nchcp 65001 >nul`r`nstart `"`" `"$pythonw`" `"$companion`"`r`n",$utf8)
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Non-Inventory.lnk'))
-$shortcut.TargetPath = Join-Path $root 'START.cmd'
-$shortcut.WorkingDirectory = $root
-$shortcut.Save()
-Start-Process -FilePath $pythonw -ArgumentList ('"' + $companion + '"')
+if (-not $NoShortcut) {
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Non-Inventory.lnk'))
+  $shortcut.TargetPath = Join-Path $root 'START.cmd'
+  $shortcut.WorkingDirectory = $root
+  $shortcut.Save()
+}
+if (-not $NoLaunch) { Start-Process -FilePath $pythonw -ArgumentList ('"' + $companion + '"') }
 Write-Host 'Setup complete. No administrator rights required.' -ForegroundColor Green
 Write-Host 'Firefox: about:debugging > This Firefox > Load Temporary Add-on > extension\manifest.json'
 Write-Host 'Open station from extension icon. Save login and scanner settings before scanning.'
 Write-Host 'Temporary extensions must be reloaded after Firefox restarts. Permanent installation requires Mozilla signing.'
-Start-Process explorer.exe -ArgumentList ('"' + (Join-Path $root 'extension') + '"')
+if (-not $NoLaunch) { Start-Process explorer.exe -ArgumentList ('"' + (Join-Path $root 'extension') + '"') }

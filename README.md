@@ -4,7 +4,7 @@ One barcode scan updates your missing-inventory CSVs and queues the SPA1 Oracle 
 
 ## Setup
 
-1. [Download the ZIP](https://github.com/builtbysai/non-inventory/blob/main/downloads/non-inventory-2.0.0.zip?raw=true), extract to a permanent local folder, and run **SETUP.cmd**. Setup installs Python and dependencies and registers the Firefox companion.
+1. [Download the ZIP](https://github.com/builtbysai/non-inventory/releases/latest), extract to a permanent local folder, and run **SETUP.cmd**. Setup installs Python and dependencies and registers the Firefox companion.
 2. Put monthly investigation CSVs in `workspace\`. Required columns: `Serial Number`, `Asset ID`, `Status`, `Found By`, `Found Date`. Keep Excel closed. Optional product/serial reference: `audit-export-reference.csv`.
 3. Firefox → `about:debugging` → **This Firefox** → **Load Temporary Add-on** → `extension\manifest.json`. Open the extension → **Open station**.
 4. Enter your login, choose scanner input, and **Save scanner settings**:

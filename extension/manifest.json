@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Non-Inventory",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "One barcode, local missing-item investigation and authorized APEX monthly audit.",
   "browser_specific_settings": {
     "gecko": {
