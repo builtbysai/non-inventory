@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -77,6 +78,14 @@ class EngineTests(unittest.TestCase):
     def test_external_edit_detected(self):
         fields,rows,fmt=self.ledger.load(self.path);self.path.write_text(self.path.read_text()+'\n')
         with self.assertRaises(RuntimeError):self.ledger.store(self.path,fields,rows,fmt)
+    def test_backup_flush_uses_windows_compatible_descriptor(self):
+        real_fsync=os.fsync
+        def writable_fsync(fd):
+            os.write(fd,b'')  # Read-only descriptors fail here, as with Windows _commit.
+            real_fsync(fd)
+        with patch('engine.os.fsync',side_effect=writable_fsync):self.capture('TAG100')
+        self.assertEqual(self.ledger.status()['csv_pending'],0)
+        self.assertEqual(self.rows()[0]['Status'],'found')
     def test_many_scans_do_not_drop(self):
         for _ in range(120):self.ledger.capture('TAG100','u')
         self.ledger.process(200)

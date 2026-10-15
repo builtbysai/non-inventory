@@ -86,7 +86,8 @@ class Ledger:
         fmt=fmt or self.load(path)[2]
         if digest(path)!=fmt['hash']:raise RuntimeError('CSV changed externally; will reload before retry')
         backup=self.backups/f'{path.stem}.{uuid4().hex}.csv';shutil.copy2(path,backup)
-        with backup.open('rb') as f:os.fsync(f.fileno())
+        # Windows _commit (os.fsync) requires a writable descriptor.
+        with backup.open('r+b') as f:os.fsync(f.fileno())
         fd,tmp=tempfile.mkstemp(prefix='.non-inventory-',suffix='.tmp',dir=path.parent)
         try:
             with os.fdopen(fd,'w',encoding=fmt['encoding'],newline='') as f:

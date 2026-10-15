@@ -1,15 +1,18 @@
 # Troubleshooting
 
-- **No capture / stale companion:** Run START.cmd. Check that the saved login, capture checkbox and input mode are correct. After reboot START.cmd is required. The station shows companion heartbeat and device errors. In focused-field mode, use F8; device modes intentionally ignore the station input. Missing capture tone means check recent receipts before rescanning.
-- **Wrong HID device:** Unplug the scanner, refresh device list, reconnect and refresh again. Select its new path, save. Never select the laptop keyboard. Raw Input observes only the selected device, but cannot stop keyboard-wedge output from reaching another foreground app. COM is preferable. Configure scanner keyboard layout to match Windows. Shift, layout punctuation, suffix and reconnect need hardware verification.
-- **COM reconnecting:** Check Device Manager's COM number and the scanner's virtual-serial mode/baud. Close other software using the port. pyserial installs during setup. CR, LF, CRLF and Tab terminate scans. A two-second gap discards an incomplete scanner frame; configure a terminator rather than relying on timing.
-- **Capture failed tone:** Check free disk space and folder permissions. A local commit must succeed before capture is acknowledged. Neither this tool nor any software can guarantee capture while powered off, disconnected, asleep, out of disk space, or before a scanner sends its terminator. Keep the computer awake and listen for acknowledgements.
-- **Native host unavailable:** Extract all files and run SETUP.cmd from a local permanent folder. Reload the temporary extension after every Firefox restart. Its ID must remain `non-inventory@builtbysai.com`. Setup registers HKCU, not machine-wide. Corporate extension policies can block native messaging; ask IT to allow this extension/host. No policy bypass is included.
-- **CSV pending / locked:** Close Excel and sync/editing software. Review pending item's `csv_error`. Every CSV directly inside workspace is treated as an investigation CSV except `audit-export-reference.csv`; move unrelated CSVs elsewhere. Required header names are exact. Malformed rows, duplicate headers and unsupported encodings require correction in a copy. Pending scans replay automatically in order.
-- **Audit paused:** Capture continues. Reconnect after fixing sign-in, SPA1 selection, report filters, dialogs, or network. Finish/discard existing manual grid edits yourself. `sending` is read-only reconciled, never retried automatically. Review a timeout even if the site appears successful.
-- **Not in audit:** The current report may be filtered or missing serials. Clear report filters and reconnect; this tool does not bypass server-side report scope. Unknown scans require a documented resolution; it does not create inventory rows blindly.
-- **New row exception:** Only provably new, unsaved scan-only rows can be removed automatically, and the scan still requires review. Persisted error rows need manual review in APEX. Never delete a row solely because it is selected or appeared last.
-- **Complete says wait:** A submission is in flight. Wait for its result and try again. Completion requires all pending work and unresolved exceptions cleared. It rechecks prior confirmed receipts; an official status change can reopen review. Manual resolutions are preserved alongside original receipts.
-- **Setup dependency download fails:** Check your approved proxy and Internet connection. Setup uses Python/winget/pip with normal TLS verification. It never disables verification or changes corporate policies. Python 3.10+ can be installed manually if winget is unavailable.
+| Problem | Action |
+| --- | --- |
+| No capture / stale companion | Run **START.cmd**. Check saved login, capture checkbox and input mode. Focused-field mode needs **F8**. Check receipts before rescanning. |
+| Wrong HID device | Compare device lists with scanner unplugged/replugged. Select its path and save. Never select your typing keyboard. Use COM to avoid foreground typing. |
+| COM reconnecting | Check Device Manager port, scanner mode and baud. Close other port users. Configure CR/LF or Tab suffix; incomplete frames expire after two seconds. |
+| Capture failure tone | Check disk space and folder permissions. Keep Windows awake. Only an acknowledged scan is safely journaled. |
+| Native host unavailable | Rerun **SETUP.cmd** from the extracted permanent folder. Reload the temporary extension after Firefox restarts. Corporate policy may require IT approval. |
+| CSV pending | Close Excel/sync editors. Check the displayed error and exact required headers. Remove unrelated CSVs from workspace. Processing retries automatically. |
+| Audit paused / not in audit | Fix sign-in, SPA1 selection, report filters, dialogs or manual edits, then reconnect. Uncertain submissions are reconciled without blind retries. |
+| Unexpected official row | Review it manually. Automatic cleanup handles only verified new, unsaved scan-only rows; persisted or legitimate inventory rows are never deleted automatically. |
+| Completion blocked | Wait for in-flight work, resolve exceptions, then reconcile again. |
+| Setup download fails | Check approved Internet/proxy access. Install Python 3.10+ manually if winget is unavailable. |
 
-`STOP.cmd` disables device capture without erasing anything. `UNINSTALL.cmd` unregisters native messaging; first run STOP.cmd and close the station. The companion remains an idle local process until logout/reboot. For relocation or upgrades, stop capture, close Firefox and end only that folder's `companion.py` process in Task Manager before copying the entire folder, then rerun setup. Never delete the journal to retry an uncertain audit.
+**STOP.cmd** disables capture; **UNINSTALL.cmd** unregisters native messaging without deleting inventory/history. The idle companion exits at logout/reboot.
+
+Before moving/upgrading: stop capture, close Firefox, end that folder's `companion.py` process, copy the entire folder, then rerun setup. Never delete the journal to retry an uncertain audit.
