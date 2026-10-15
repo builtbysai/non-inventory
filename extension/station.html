@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Non Inventory / Scan Station</title><link rel="stylesheet" href="station.css"></head>
 <body><div class="app">
-<header class="mast"><div><span class="kicker">FIELD IT / SPA1</span><h1>Inventory scan station<span class="v">01</span></h1></div><div class="topright"><span id="state" class="state" role="status">Checking local engine</span><button id="pause" class="small">Pause <kbd>F9</kbd></button></div></header>
+<header class="mast"><div><span class="kicker">FIELD IT / SPA1</span><h1>Inventory scan station<span class="v">02</span></h1></div><div class="topright"><span id="state" class="state" role="status">Checking local engine</span><button id="pause" class="small">Pause <kbd>F9</kbd></button></div></header>
 <main class="grid"><section class="station" aria-labelledby="sectionTitle">
   <div class="section-line"><h2 id="sectionTitle">Live scanning</h2><span id="modeText">Local input</span></div>
   <label for="serial" class="scanlabel">READY FOR BARCODE</label>
@@ -12,14 +12,21 @@
   <ol id="activity" class="activity"><li>No scans yet.</li></ol>
 </section><aside class="side"><h2>Setup & controls</h2>
   <label class="setting-label" for="login">Technician login</label><input type="text" id="login" maxlength="80" autocomplete="username" placeholder="Enter your login">
-  <label class="setting-label" for="tabs">Inventory browser tab</label><div class="tabrow"><select id="tabs" aria-label="Official inventory tab"></select><button id="refresh" title="Refresh browser tabs" aria-label="Refresh browser tabs">↻</button></div>
+  <label class="setting-label" for="inputMode">Scanner input</label>
+<select id="inputMode"><option value="station">Focused scan field (USB keyboard)</option><option value="hid">Windows device-specific HID (background)</option><option value="com">COM port (recommended)</option></select>
+<label class="setting-label" for="device">HID scanner device</label><select id="device" aria-label="HID device"></select><button id="devicesRefresh">Refresh scanner devices</button>
+<p class="help">Select the scanner's VID/PID, never your typing keyboard. HID also types into the foreground app; keep the station focused or use COM.</p>
+<label class="setting-label" for="comPort">COM port / baud</label><input id="comPort" value="COM3" aria-label="COM port"><select id="baud" aria-label="COM baud rate"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
+<label class="toggle"><input id="captureEnabled" type="checkbox" checked> <span>Capture device scans (continues if Firefox closes)</span></label>
+<button id="saveInput">Save scanner settings</button><p id="health" class="help" role="status"></p>
+<label class="setting-label" for="tabs">Inventory browser tab</label><div class="tabrow"><select id="tabs" aria-label="Official inventory tab"></select><button id="refresh" title="Refresh browser tabs" aria-label="Refresh browser tabs">↻</button></div>
   <button class="primary" id="connect">Connect official audit</button><p id="auditInfo" class="help">Open your company's Field IT Audit Count page in Firefox and select SPA1.</p>
   <div class="rule"></div>
   <label class="toggle"><input id="csvOnly" type="checkbox"> <span>Investigation only (do not update official audit)</span></label>
   <label class="toggle"><input id="voice" type="checkbox" checked> <span>Voice and audio feedback</span></label>
   <div class="rule"></div><h3>Original investigation files</h3><div id="files" class="files">Checking files…</div>
-  <p class="help">Found date and login update immediately. Files, backups and the recovery journal remain on this computer.</p>
-  <div class="rule"></div><div class="reviewbuttons"><button id="review">Found items / Edit details</button><button id="exceptions">Pending & exceptions</button></div>
+  <p class="help">Found date and login update as the durable queue is processed. Files, backups and the recovery journal remain on this computer.</p>
+  <div class="rule"></div><div class="reviewbuttons"><button id="review">Found items / Edit details</button><button id="exceptions">Pending & exceptions</button><button id="complete">Reconcile & complete</button></div>
 </aside></main>
 <footer><span>OFFLINE CAPTURE / OFFICIAL SITE VIA AUTHENTICATED FIREFOX TAB</span><span id="footer">Initializing…</span></footer></div>
 <dialog id="dialog"><div class="dialogtop"><h2 id="dialogTitle">Review</h2><button id="close" aria-label="Close dialog">Close</button></div><div id="dialogBody"></div></dialog>

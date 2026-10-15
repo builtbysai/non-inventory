@@ -1,0 +1,2 @@
+# Only direct COM-port mode needs this dependency. HID and the journal use stdlib.
+pyserial==3.5

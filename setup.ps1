@@ -1,68 +1,59 @@
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-Write-Host "`nNON INVENTORY  /  SPA1 installer" -ForegroundColor Cyan
-Write-Host '----------------------------------------'
-if (-not (Test-Path (Join-Path $root 'extension\manifest.json'))) { throw 'Project was not fully extracted. Unzip ALL files, then try again.' }
-if (-not (Test-Path (Join-Path $root 'app\native_host.py'))) { throw 'Missing application files.' }
-
+Write-Host 'Non-Inventory / Windows setup' -ForegroundColor Cyan
+if (-not (Test-Path (Join-Path $root 'app\native_host.py'))) { throw 'Extract the entire release ZIP first.' }
 function Find-Python {
-  foreach ($candidate in @(@('py','-3'), @('python',''))) {
+  foreach ($name in @('py','python')) {
     try {
-      $command = Get-Command $candidate[0] -ErrorAction Stop
-      $args = if ($candidate[1]) { @($candidate[1], '-c', 'import sys; print(sys.executable if sys.version_info.major == 3 else "")') }
-              else { @('-c','import sys; print(sys.executable if sys.version_info.major == 3 else "")') }
-      $exe = (& $command.Source @args 2>$null | Select-Object -First 1)
-      if ($exe -and (Test-Path $exe)) { return $exe.Trim() }
+      $command = Get-Command $name -ErrorAction Stop
+      $arguments = @('-c','import sys; print(sys.executable if sys.version_info >= (3,10) else "")')
+      if ($name -eq 'py') { $arguments = @('-3') + $arguments }
+      $exe = (& $command.Source @arguments 2>$null | Select-Object -First 1)
+      if ($exe -and (Test-Path $exe.Trim())) { return $exe.Trim() }
     } catch { }
   }
+  $candidate = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'
+  if (Test-Path $candidate) { return $candidate }
   return $null
 }
 $python = Find-Python
 if (-not $python) {
-  Write-Host 'Python 3 was not found.' -ForegroundColor Yellow
-  $winget = Get-Command winget -ErrorAction SilentlyContinue
-  if ($winget) {
-    $answer = Read-Host 'Install Python 3 using Windows Package Manager (winget)? Y/N'
-    if ($answer -match '^y') {
-      & winget install -e --id Python.Python.3.13 --source winget --accept-source-agreements --accept-package-agreements
-      $python = Find-Python
-    }
-  }
-  if (-not $python) { throw 'Install Python 3 from python.org, close and reopen the terminal, then run SETUP.cmd again.' }
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Install Python 3.10+ from python.org, then rerun SETUP.cmd.' }
+  & winget install -e --id Python.Python.3.13 --source winget --scope user --accept-source-agreements --accept-package-agreements
+  if ($LASTEXITCODE -ne 0) { throw 'Python installation failed.' }
+  $python = Find-Python
+  if (-not $python) { throw 'Open a new terminal and run SETUP.cmd again so Windows can find Python.' }
 }
-Write-Host "Python: $python" -ForegroundColor Green
-$ws = Join-Path $root 'workspace'
-New-Item -ItemType Directory -Force -Path $ws | Out-Null
-$files = @(Get-ChildItem -Path $ws -Filter 'investigation-items *.csv' -File)
-Write-Host "Investigation CSV files: $($files.Count)"
-if ($files.Count -eq 0) {
-  Write-Warning 'No investigation CSV files in workspace. Copy your July/August/September source files here before scanning.'
-}
-$launcher = Join-Path $root 'app\native_launcher.bat'
-$script = Join-Path $root 'app\native_host.py'
-$launcherText = "@echo off`r`n`"$python`" -u `"$script`"`r`n"
-[IO.File]::WriteAllText($launcher, $launcherText, [Text.Encoding]::ASCII)
-$nativeManifest = Join-Path $root 'app\non_inventory_host.json'
-$json = @{name='non_inventory_host';description='Local field IT audit and CSV companion';path=$launcher;type='stdio';allowed_extensions=@('non-inventory@builtbysai.com')} | ConvertTo-Json -Depth 3
-[IO.File]::WriteAllText($nativeManifest,$json,(New-Object Text.UTF8Encoding($false)))
-$registry = 'HKCU:\Software\Mozilla\NativeMessagingHosts\non_inventory_host'
-New-Item -Path $registry -Force | Out-Null
-Set-Item -Path $registry -Value $nativeManifest
-Write-Host 'Native messaging connected for this Windows account.' -ForegroundColor Green
+& $python -m venv (Join-Path $root '.venv')
+if ($LASTEXITCODE -ne 0) { throw 'Could not create local Python environment.' }
+$python = Join-Path $root '.venv\Scripts\python.exe'
+$pythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
+& $python -m pip install --disable-pip-version-check -r (Join-Path $root 'requirements.txt')
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed. Check network/proxy, then rerun.' }
+New-Item -ItemType Directory -Force -Path (Join-Path $root 'workspace') | Out-Null
 & $python (Join-Path $root 'tests\preflight.py')
-if ($LASTEXITCODE -ne 0) { throw 'Self-check failed; review reported errors before scanning.' }
-Write-Host "`nLAST STEP: Firefox temporary extension" -ForegroundColor Cyan
-Write-Host '1. Firefox: about:debugging > This Firefox > Load Temporary Add-on'
-Write-Host "2. Select: $(Join-Path $root 'extension\manifest.json')"
-Write-Host '3. Click the extension icon > Open station. Open your APEX inventory audit in another tab.'
-Write-Host 'Temporary add-ons require reloading after restarting Firefox. This cannot be bypassed by this installer.'
-try {
-  $firefox = Get-Command firefox -ErrorAction SilentlyContinue
-  if ($firefox) { $firefoxPath = $firefox.Source }
-  elseif (Test-Path "${env:ProgramFiles}\Mozilla Firefox\firefox.exe") { $firefoxPath = "${env:ProgramFiles}\Mozilla Firefox\firefox.exe" }
-  elseif (Test-Path "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe") { $firefoxPath = "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe" }
-  else { $firefoxPath = $null }
-  if ($firefoxPath) { Start-Process -FilePath $firefoxPath -ArgumentList 'about:debugging#/runtime/this-firefox' }
-} catch { Write-Host 'Open about:debugging in Firefox manually.' }
-Start-Process explorer.exe -ArgumentList (Join-Path $root 'extension')
-Write-Host "`nSetup complete. Keep this folder in place." -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { throw 'CSV preflight failed. Fix headers before enabling capture.' }
+$utf8 = New-Object Text.UTF8Encoding($false)
+$launcher = Join-Path $root 'app\native_launcher.bat'
+$nativeScript = Join-Path $root 'app\native_host.py'
+[IO.File]::WriteAllText($launcher,"@echo off`r`nchcp 65001 >nul`r`n`"$python`" -u `"$nativeScript`"`r`n",$utf8)
+$manifestPath = Join-Path $root 'app\non_inventory_host.json'
+$manifest = @{name='non_inventory_host';description='Non-Inventory local companion';path=$launcher;type='stdio';allowed_extensions=@('non-inventory@builtbysai.com')} | ConvertTo-Json
+[IO.File]::WriteAllText($manifestPath,$manifest,$utf8)
+$key = 'HKCU:\Software\Mozilla\NativeMessagingHosts\non_inventory_host'
+New-Item -Path $key -Force | Out-Null
+Set-Item -Path $key -Value $manifestPath
+$companion = Join-Path $root 'app\companion.py'
+$startLauncher = Join-Path $root 'app\start_companion.cmd'
+[IO.File]::WriteAllText($startLauncher,"@echo off`r`nchcp 65001 >nul`r`nstart `"`" `"$pythonw`" `"$companion`"`r`n",$utf8)
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Non-Inventory.lnk'))
+$shortcut.TargetPath = Join-Path $root 'START.cmd'
+$shortcut.WorkingDirectory = $root
+$shortcut.Save()
+Start-Process -FilePath $pythonw -ArgumentList ('"' + $companion + '"')
+Write-Host 'Setup complete. No administrator rights required.' -ForegroundColor Green
+Write-Host 'Firefox: about:debugging > This Firefox > Load Temporary Add-on > extension\manifest.json'
+Write-Host 'Open station from extension icon. Save login and scanner settings before scanning.'
+Write-Host 'Temporary extensions must be reloaded after Firefox restarts. Permanent installation requires Mozilla signing.'
+Start-Process explorer.exe -ArgumentList ('"' + (Join-Path $root 'extension') + '"')

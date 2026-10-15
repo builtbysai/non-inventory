@@ -9,3 +9,12 @@ __pycache__/
 .DS_Store
 app/native_launcher.bat
 app/non_inventory_host.json
+.venv/
+dist/
+app/start_companion.cmd
+*.csv
+*.sqlite*
+*.db
+*.log
+*.html.saved
+.env*
