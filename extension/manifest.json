@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Non-Inventory",
-  "version": "2.0.1",
-  "description": "One barcode, local missing-item investigation and authorized APEX monthly audit.",
+  "version": "2.1.0",
+  "description": "Local inventory scanning, missing-item investigation, and verified Oracle APEX audit.",
   "browser_specific_settings": {
     "gecko": {
       "id": "non-inventory@builtbysai.com",
@@ -27,7 +27,7 @@
     "http://*/*"
   ],
   "browser_action": {
-    "default_title": "Non Inventory \u00b7 SPA1",
+    "default_title": "Non-Inventory",
     "default_popup": "popup.html"
   }
 }

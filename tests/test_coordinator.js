@@ -2,10 +2,11 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync(require('node:path').resolve(__dirname,'../extension/background.js'),'utf8');
 let messageListener,disconnectListener,submissions=0,reconciliations=0,fail=false;
-const config={connected:true,paused:false,csvOnly:false,tabId:4,origin:'https://inventory.example.invalid'};
+const config={connected:true,paused:false,csvOnly:false,tabId:4,auditSite:{value:'SPA1',label:'SPA1'},origin:'https://inventory.example.invalid'};
 const receipts=[{id:'one',serial:'A12345',audit:'queued'}];
 const native={postMessage(msg){queueMicrotask(()=>{
   let result={ok:true,requestId:msg.requestId};
+  if(msg.action==='config')result.config={companion_enabled:true};
   if(msg.action==='pending')result.pending=receipts.filter(x=>['queued','sending'].includes(x.audit));
   if(msg.action==='audit_result')receipts.find(x=>x.id===msg.id).audit=msg.outcome;
   messageListener(result);

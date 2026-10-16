@@ -45,6 +45,8 @@ class Ledger:
               CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS resolutions(id TEXT PRIMARY KEY,note TEXT NOT NULL,at TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS completions(at TEXT PRIMARY KEY,summary TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS runtime_status(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS detail_edits(id TEXT PRIMARY KEY,at TEXT NOT NULL,username TEXT NOT NULL,file TEXT NOT NULL,serial TEXT NOT NULL,changes TEXT NOT NULL);
               CREATE INDEX IF NOT EXISTS audit_queue ON scans(audit,scanned_at);''')
             cols={r[1] for r in c.execute('PRAGMA table_info(scans)')}
             for key,decl in [('raw',"TEXT NOT NULL DEFAULT ''"),('source',"TEXT NOT NULL DEFAULT 'station'"),
@@ -61,7 +63,7 @@ class Ledger:
     def config(self):
         with self.db_open() as c:return {r['key']:json.loads(r['value']) for r in c.execute('SELECT * FROM settings')}
     def configure(self,values):
-        allowed={'username','input_mode','device','port','baud','capture_enabled'}
+        allowed={'username','input_mode','device','port','baud','capture_enabled','companion_enabled','identify_until','identified_device'}
         if set(values)-allowed: raise ValueError('Unknown setting')
         if 'input_mode' in values and values['input_mode'] not in {'station','hid','com'}:raise ValueError('Invalid input mode')
         if 'username' in values and not 1<=len(str(values['username']).strip())<=80:raise ValueError('Enter technician login')
@@ -125,6 +127,7 @@ class Ledger:
         if not username or len(username)>80:raise ValueError('Enter your technician login before scanning.')
         if not raw or len(raw)>512:raise ValueError('Barcode must contain 1–512 characters')
         scanid=receipt_id or uuid4().hex
+        if self.config().get('companion_enabled') is False:raise ValueError('Capture is stopped. Select Start scanning to resume.')
         with self.db_open() as c:
             c.execute('INSERT OR IGNORE INTO scans(id,serial,raw,source,scanned_at,username,investigation,matches,audit,csv_state) VALUES(?,?,?,?,?,?,?,?,?,?)',
                       (scanid,norm(raw),raw,source,now(),username,'pending',0,'queued','pending'))
@@ -187,6 +190,10 @@ class Ledger:
             return {'ok':True,'files':[p.name for p in self.files()],'scanned':sum(grouped.values()),'audit':grouped,
                     'csv_pending':c.execute("SELECT COUNT(*) FROM scans WHERE csv_state!='done'").fetchone()[0],
                     'found':c.execute('SELECT COUNT(*) FROM observations').fetchone()[0],
+                    'missing_repeats':c.execute("SELECT COUNT(*) FROM scans WHERE investigation='found' AND repeat=1").fetchone()[0],
+                    'details_saved':c.execute('SELECT COUNT(*) FROM detail_edits').fetchone()[0],
+                    'audited_unique':c.execute("SELECT COUNT(DISTINCT serial) FROM scans WHERE audit IN ('audited','already_audited')").fetchone()[0],
+                    'review_count':c.execute("SELECT COUNT(*) FROM scans s LEFT JOIN resolutions r ON s.id=r.id WHERE r.id IS NULL AND (s.audit IN ('needs_review','not_in_audit','offline') OR s.csv_error!='')").fetchone()[0],
                     'recent':[dict(r) for r in c.execute('SELECT * FROM scans ORDER BY scanned_at DESC,rowid DESC LIMIT 35')]}
     def found(self):
         with self.db_open() as c:results={r['serial']:dict(r) for r in c.execute('SELECT * FROM observations ORDER BY last_seen DESC')}
@@ -211,6 +218,39 @@ class Ledger:
                         row['Found Location']=str(location);row['Found Notes']=str(notes);changed=True;updated+=1
                 if changed:self.store(path,fields,rows,fmt)
         return {'ok':True,'updated':updated}
+    @staticmethod
+    def editable(fields):
+        protected={'Serial Number','Asset ID','Status','Found By','Found Date'}
+        return [f for f in fields if f not in protected and (f.lower().startswith(('found ','investigation ')) or f.lower() in {'notes','location','owner','assigned to'})]
+    def investigation(self,serial):
+        serial=norm(serial);records=[]
+        for path in self.files():
+            fields,rows,fmt=self.load(path)
+            for index,row in enumerate(rows):
+                if serial in {norm(row.get('Serial Number')),norm(row.get('Asset ID'))}:
+                    records.append({'file':path.name,'row':index,'version':fmt['hash'],'values':row,'fields':fields,'editable':self.editable(fields)})
+        return {'ok':True,'serial':serial,'records':records}
+    def save_investigation(self,serial,file,index,version,changes,username,expected=None):
+        serial=norm(serial)
+        if not isinstance(changes,dict) or not changes:raise ValueError('No changes to save')
+        if not str(username or '').strip():raise ValueError('Save your technician login first')
+        path=next((p for p in self.files() if p.name==file),None)
+        if path is None:raise ValueError('Investigation file unavailable')
+        with LOCK,self.db_open() as c:
+            c.execute('BEGIN IMMEDIATE')
+            fields,rows,fmt=self.load(path)
+            if fmt['hash']!=version and not isinstance(expected,dict):raise ValueError('File changed since this form opened. Reload the form; your draft has not been applied.')
+            if not isinstance(index,int) or index<0 or index>=len(rows):raise ValueError('Row unavailable')
+            row=rows[index]
+            if serial not in {norm(row.get('Serial Number')),norm(row.get('Asset ID'))}:raise ValueError('Item identity changed; reload the form')
+            if set(changes)-set(self.editable(fields)):raise ValueError('These fields are read-only')
+            if any(not isinstance(v,str) or len(v)>4000 for v in changes.values()):raise ValueError('Field values must be text up to 4000 characters')
+            if isinstance(expected,dict) and any(k not in expected or row[k]!=expected[k] for k in changes):raise ValueError('An edited field changed since this form opened. Reload the record before saving.')
+            delta={k:{'before':row[k],'after':v} for k,v in changes.items() if row[k]!=v}
+            if delta:
+                row.update(changes);self.store(path,fields,rows,fmt)
+                c.execute('INSERT INTO detail_edits VALUES(?,?,?,?,?,?)',(uuid4().hex,now(),str(username),path.name,serial,json.dumps(delta)))
+        return {'ok':True,'updated':len(delta)}
     def exceptions(self):
         with self.db_open() as c:return {'ok':True,'exceptions':[dict(r) for r in c.execute("SELECT s.*,r.note resolution FROM scans s LEFT JOIN resolutions r ON r.id=s.id WHERE (s.audit IN ('needs_review','sending','offline','queued','not_in_audit') OR s.csv_state!='done') AND r.id IS NULL ORDER BY s.scanned_at LIMIT 200")]}
     def resolve(self,scanid,note):
@@ -233,7 +273,16 @@ class Ledger:
     def dispatch(self,r):
         a=r.get('action')
         if a=='scan':return self.capture(r.get('serial'),r.get('username'),r.get('source','station'),r.get('id'))
+        if a=='bind_site':
+            site=r.get('site',{})
+            if not isinstance(site,dict) or not site.get('value') or not site.get('label'):raise ValueError('Site identity missing')
+            existing=self.config().get('audit_site')
+            if existing and existing['value']!=site['value']:raise ValueError('This journal belongs to '+existing['label']+'. Use a separate installation for a different site.')
+            with self.db_open() as c:c.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',('audit_site',json.dumps(site)))
+            return {'ok':True}
         if a=='status':return self.status()
+        if a=='investigation':return self.investigation(r.get('serial'))
+        if a=='save_investigation':return self.save_investigation(r.get('serial'),r.get('file'),r.get('row'),r.get('version'),r.get('changes'),r.get('username'),r.get('expected'))
         if a=='audit_receipts':
             with self.db_open() as c:return {'ok':True,'receipts':[dict(x) for x in c.execute("SELECT DISTINCT serial FROM scans WHERE audit IN ('audited','already_audited')")]}
         if a=='verify_failed':

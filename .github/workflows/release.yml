@@ -22,6 +22,7 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: node tests/test_apex_mock.js
       - run: node tests/test_coordinator.js
+      - run: node tests/test_station_core.js
       - run: node --check extension/background.js
       - run: node --check extension/station.js
       - name: Install with Windows PowerShell 5.1 and test native launcher

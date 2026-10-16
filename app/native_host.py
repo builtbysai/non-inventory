@@ -8,7 +8,8 @@ import os
 import threading
 import time
 from companion import start
-from scanners import devices
+from scanners import device_choices
+from runtime import health,stop
 from engine import Ledger
 
 MAX_IN = 1024 * 1024
@@ -31,7 +32,8 @@ def run():
     else:
         def worker():
             while True:
-                try: LEDGER.process(40)
+                try:
+                    if LEDGER.config().get('companion_enabled',True):LEDGER.process(1)
                 except Exception: pass
                 time.sleep(.2)
         threading.Thread(target=worker,daemon=True).start()
@@ -45,10 +47,13 @@ def run():
         request={}
         try:
             request=json.loads(packet)
-            if request.get('action')=='devices':result={'ok':True,'devices':devices()}
-            elif request.get('action')=='health':
-                path=LEDGER.workspace/'companion-health.json'
-                result={'ok':True,'health':json.loads(path.read_text()) if path.exists() else {'input':'Not running'}}
+            if request.get('action')=='devices':result={'ok':True,**device_choices()}
+            elif request.get('action')=='health':result=health(LEDGER)
+            elif request.get('action')=='stop_companion':result=stop(LEDGER)
+            elif request.get('action')=='start_companion':
+                start(force=True);result={'ok':True}
+            elif request.get('action')=='identify_scanner':
+                LEDGER.configure({'identified_device':'','identify_until':time.time()+20});start(force=True);result={'ok':True}
             else:result=LEDGER.dispatch(request)
         except Exception as exc:
             result={'ok':False,'error':str(exc)[:250]}

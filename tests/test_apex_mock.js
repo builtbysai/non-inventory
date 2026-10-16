@@ -11,6 +11,7 @@ function fixture(behavior='stage'){
     save(){saves++;return Promise.resolve();}
   };
   const jq=()=>({trigger(){submissions++;
+    if(behavior==='sitechange'){site='SPA2';return;}
     if(behavior==='throw')throw new Error('Network interrupted');
     if(behavior==='stage')records.find(r=>r.SERIAL_NUMBER===last).STATUS='Staged for Audit';
     else if(['unsafe','safe','persisted','otheredit'].includes(behavior)){
@@ -23,7 +24,8 @@ function fixture(behavior='stage'){
   const apex={region:()=>({widget:()=>({interactiveGrid:()=>({model})})}),item:()=>({setValue:v=>{last=v;}}),jQuery:jq};
   const document={querySelector(s){if(s==='#P4_SITE')return {selectedOptions:[{textContent:site}]};if(['#P4_SELECT_SERIAL','#CYCLE_COUNT'].includes(s))return input;if(s==='#P4_COUNTED_SERIAL')return code;return null;},querySelectorAll:()=>[]};
   const sandbox={window:{apex},apex,document,Promise,Date,console,clearTimeout,setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,5))};
-  const fn=vm.runInNewContext('('+source.slice(source.indexOf('async function apexWork('))+')',sandbox);
+  const work=vm.runInNewContext('('+source.slice(source.indexOf('async function apexWork('))+')',sandbox);
+  const fn=command=>work({expectedSite:{value:'SPA1',label:'SPA1'},...command});
   return {fn,records,metadata,model,setSite:v=>site=v,setDirty:v=>dirty=v,counts:()=>({submissions,deletions,saves}),last:()=>last};
 }
 (async()=>{
@@ -35,10 +37,11 @@ function fixture(behavior='stage'){
   assert.equal((await f.fn({op:'reconcile',serial:'C56789'})).outcome,'needs_review');
   assert.equal((await f.fn({op:'verify_many',serials:['A12345','C56789']})).failed.length,1);
   f=fixture();f.records.push({id:'4',SERIAL_NUMBER:'A12345',STATUS:'Not Audited'});assert.equal((await f.fn({op:'stage',serial:'A12345'})).outcome,'needs_review');assert.equal(f.counts().submissions,0);
-  f=fixture();f.setSite('SPA10');assert.equal((await f.fn({op:'inspect'})).ok,false);
+  f=fixture();f.setSite('SPA10');assert.equal((await f.fn({op:'inspect'})).site.label,'SPA10');assert.equal((await f.fn({op:'stage',serial:'A12345'})).ok,false);assert.equal(f.counts().submissions,0);
   f=fixture();f.setDirty(true);assert.equal((await f.fn({op:'stage',serial:'A12345'})).outcome,'needs_review');assert.equal(f.counts().submissions,0);
   f=fixture('safe');assert.match((await f.fn({op:'stage',serial:'A12345'})).message,/removed/);assert.deepEqual(f.counts(),{submissions:1,deletions:1,saves:1});
   for(const behavior of ['unsafe','persisted','otheredit']){f=fixture(behavior);assert.equal((await f.fn({op:'stage',serial:'A12345'})).outcome,'needs_review');assert.equal(f.counts().deletions,0,behavior+' must not delete');}
+  f=fixture('sitechange');assert.equal((await f.fn({op:'stage',serial:'A12345'})).ok,false);assert.equal(f.counts().submissions,1);
   f=fixture('throw');assert.equal((await f.fn({op:'stage',serial:'A12345'})).ok,false);assert.equal((await f.fn({op:'reconcile',serial:'A12345'})).outcome,'needs_review');assert.equal(f.counts().submissions,1);
   console.log('PASS APEX: identity, canonical serial, repeats, ambiguity, site scope, dirty edits, verified cleanup, unsafe deletion refusal, interruption, reconciliation');
 })().catch(e=>{console.error(e);process.exitCode=1;});

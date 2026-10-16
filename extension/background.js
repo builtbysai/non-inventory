@@ -11,6 +11,11 @@ function host(command){
   return new Promise((resolve,reject)=>{const id=String(++seq),t=setTimeout(()=>{inflight.delete(id);reject(new Error('Companion timeout; receipt may already be saved. Reconnect before rescanning.'));},35000);inflight.set(id,{resolve,reject,t});try{port.postMessage({...command,requestId:id});}catch(e){clearTimeout(t);inflight.delete(id);reject(e);}});
 }
 async function inject(tabId,request){
+  if(request.op!=='inspect'){
+    const {auditSite}=await browser.storage.local.get('auditSite');
+    if(!auditSite)throw new Error('Reconnect the official audit to confirm its site.');
+    request={...request,expectedSite:auditSite};
+  }
   const result=(await browser.scripting.executeScript({target:{tabId},world:'MAIN',func:apexWork,args:[request]}))?.[0]?.result;
   if(!result?.ok)throw new Error(result?.message||'Official tab unavailable');return result;
 }
@@ -25,6 +30,8 @@ async function processQueue(){
   try{
     const cfg=await browser.storage.local.get(['paused','connected','csvOnly']);
     if(cfg.paused||(!cfg.connected&&!cfg.csvOnly))return;
+    const local=(await host({action:'config'})).config;
+    if(local.companion_enabled===false)return;
     const {pending}=await host({action:'pending'});const item=pending[0];if(!item)return;
     let result;
     if(cfg.csvOnly&&item.audit!=='sending')result={outcome:'csv_only',message:'Investigation only; website unchanged.'};
@@ -45,11 +52,25 @@ async function processQueue(){
 }
 async function route(msg){
   if(msg.action==='host')return host(msg.payload);
+  if(msg.action==='stop'){
+    await browser.storage.local.set({paused:true});
+    return host({action:'stop_companion'});
+  }
+  if(msg.action==='start'){
+    await host({action:'start_companion'});
+    for(let attempt=0;attempt<30;attempt++){
+      if((await host({action:'health'})).health.running){await browser.storage.local.set({paused:false});return {ok:true};}
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    throw new Error('Companion did not start. Run START.cmd and check folder permissions.');
+  }
   if(msg.action==='tabs'){const ts=await browser.tabs.query({});return {ok:true,tabs:ts.filter(t=>/^https?:/.test(t.url||'')).map(t=>({id:t.id,title:t.title,url:t.url}))};}
   if(msg.action==='connect'){
     const tab=await browser.tabs.get(Number(msg.tabId)),u=new URL(tab.url);
     if(!/^https?:$/.test(u.protocol)||!await browser.permissions.contains({origins:[u.origin+'/*']}))throw new Error('Grant access to the selected official site');
-    const r=await inject(tab.id,{op:'inspect'});await browser.storage.local.set({tabId:tab.id,origin:u.origin,connected:true,paused:false});return r;
+    const r=await inject(tab.id,{op:'inspect'});
+    await host({action:'bind_site',site:r.site});
+    await browser.storage.local.set({tabId:tab.id,origin:u.origin,auditSite:r.site,connected:true,paused:false});return r;
   }
   if(msg.action==='complete'){
     if(working)throw new Error('Wait for the in-flight audit submission to finish, then complete again.');
@@ -79,8 +100,21 @@ async function apexWork(command){
     if(!document.querySelector('#P4_SELECT_SERIAL')||!document.querySelector('#CYCLE_COUNT')||!window.apex?.region)
       return fail('Not the Field IT Audit Count page. Open the actual live APEX audit.');
     const site=document.querySelector('#P4_SITE');
-    const siteName=site?.selectedOptions?.[0]?.textContent||site?.value||'';
-    if(!/^SPA1(?:\s|$|\s*[-(])/.test(n(siteName)))return fail('Select SPA1 on the inventory website.');
+    let siteValue=String(site?.value??'').trim();
+    let siteName=String(site?.selectedOptions?.[0]?.textContent||'').trim();
+    try{
+      const item=apex.item('P4_SITE');siteValue=String(item.getValue?.()||siteValue).trim();
+      siteName=siteName||String(item.displayValueFor?.(siteValue)||'').trim();
+    }catch(_){}
+    siteName=siteName||siteValue;
+    if(!siteName||/^(?:select|choose|--)/i.test(siteName))return fail('Select a site on the inventory page first.');
+    const detectedSite={value:siteValue||siteName,label:siteName};
+    function sameSite(){
+      const current=document.querySelector('#P4_SITE');
+      return n(current?.value||current?.selectedOptions?.[0]?.textContent)===n(detectedSite.value);
+    }
+    if(command.op!=='inspect'&&(!command.expectedSite||n(command.expectedSite.value)!==n(detectedSite.value)))
+      return fail('The selected audit site changed. Submissions stopped; reconnect to verify the site.');
     const region=apex.region('CYCLE_COUNT');
     const model=()=>region.widget().interactiveGrid('getCurrentView').model;
     if(typeof model().getRecordMetadata!=='function')return fail('APEX record metadata unavailable; cannot verify saved records.');
@@ -125,7 +159,7 @@ async function apexWork(command){
     if(command.op==='inspect'){
       const indexed=state.rows.filter(r=>r.serials.length).length;
       if(!indexed)return fail('Official grid has no serials to match. CSV-only mode remains available.');
-      return {ok:true,total:state.total,indexed,
+      return {ok:true,site:detectedSite,total:state.total,indexed,
         notAudited:state.rows.filter(r=>/^not audited$/i.test(r.status)).length,
         note:indexed<state.total?'Some official rows have no serial match. Unknown serials will be skipped.':'Full row index available.'};
     }
@@ -153,7 +187,7 @@ async function apexWork(command){
       return {ok:true,outcome:'needs_review',message:'Interrupted audit not confirmed. Verify official page manually.'};
     }
     if(command.op!=='stage')return fail('Unsupported action');
-    if(matches.length===0)return {ok:true,outcome:'not_in_audit',message:'Not in loaded SPA1 serial index; official system not changed.'};
+    if(matches.length===0)return {ok:true,outcome:'not_in_audit',message:'Not in loaded site serial index; official system not changed.'};
     // Re-read status immediately before a write; cached identifiers are only hints.
     const live=await allRows();state.rows=live.rows;
     matches=find(live.rows);
@@ -185,6 +219,7 @@ async function apexWork(command){
       return {ok:true,outcome:'needs_review',message:'Unexpected audit status: '+existing.status};
     if([...document.querySelectorAll('.ui-dialog,[role="dialog"]')].some(x=>x.getClientRects().length))
       return {ok:true,outcome:'needs_review',message:'Dismiss official dialog before continuing.'};
+    if(!sameSite())return fail('Site changed while loading inventory. No submission.');
     const input=document.querySelector('#P4_SELECT_SERIAL');
     // Clear stale flag before invoking the page's own Enter-key dynamic action.
     if(document.querySelector('#P4_COUNTED_SERIAL'))document.querySelector('#P4_COUNTED_SERIAL').value='';
@@ -201,6 +236,7 @@ async function apexWork(command){
     }
     let nextFullRead=started+2300;
     while(Date.now()<deadline){
+      if(!sameSite())return fail('Site changed during submission. Reconcile on the original site.');
       const code=String(document.querySelector('#P4_COUNTED_SERIAL')?.value||'');
       // Return codes alone never prove row identity or successful staging.
       if(['2','3','4','7','8','9'].includes(code)){

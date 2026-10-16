@@ -1,25 +1,46 @@
-# Design and integration contract
+# Design notes
 
-The Python companion is an independent Windows process with a per-folder exclusive file lock, Raw Input message-only window and reconnecting COM reader. It stores raw scanner receipts in SQLite (WAL, FULL synchronization) immediately. A worker projects pending receipts into CSVs using optimistic file-hash checks, fsynced temporary files, original backups and atomic replacement. SQLite serializes projection workers, committing between scans. A partially applied multi-file update is replayable from its original receipt timestamp; it is not claimed to be a cross-filesystem atomic transaction. Avoid external editors while capture runs: portable atomic compare-and-swap for arbitrary externally edited CSV files is unavailable.
+## Data and recovery
 
-The native host uses Firefox's length-prefixed stdio protocol, Windows binary mode and request IDs. It exposes no TCP server, browser cookies, credentials or cloud API. The extension grants optional access only to the chosen website origin. Python stores the user-entered technician login locally; APEX continues using the signed-in browser session. No passwords are stored.
+Python commits raw receipts to SQLite (WAL, FULL synchronization) before CSV or website work. The companion projects receipts into all matching monthly CSVs using backups, fsynced temporary files and atomic replacement. A partial multi-file update replays the original timestamp. This is recovery across files, not a filesystem transaction; keep external editors closed while scanning.
 
-A persistent Firefox background page (Manifest V2) owns one official audit worker across station tabs. A native transport port and independent companion separate capture from page latency. On disconnect, `sending` remains durable and only read-only reconciliation may classify it. Changing to CSV-only cannot erase an uncertain remote write. Complete performs one full-index reconciliation pass before the local completion snapshot. A completion is a snapshot of journal receipts, not proof that the entire physical cage was covered.
+The native host exposes only Firefox length-prefixed stdio. It stores no browser credentials and opens no network listener. Local status, stop requests and heartbeat now use SQLite, removing Windows sharing conflicts around the old JSON heartbeat. Stop persists `companion_enabled=false`, finishes the current CSV projection and exits the actual companion. Reconnecting Firefox does not restart it; Start explicitly does. The stdio bridge can stay available for controls.
 
-Reference cache keys use filename, mtime and size. Matching prefers exact serial/asset identity, then explicit scanner prefix removal and punctuation/spacing normalization only if unique. It does not infer manufacturer serial lengths, repair check digits, strip arbitrary digits, or use fuzzy matching. Product references are rejection hints; a known exact device identity takes priority. Unknown plausible identifiers remain journaled and are checked against the official grid. Known serials whose formatting collapses to conflicting identities require review.
+Reference caches match exact serials/asset IDs first, then explicitly framed or punctuation-normalized values only when unique. No fuzzy guessing. Repeat scans update last-seen/login and retain first-seen; unique-found and repeat totals are separate.
 
-APEX adapter: `P4_SITE` must identify SPA1; region `CYCLE_COUNT` must provide a complete current-report model. Expected fields: `SERIAL_NUMBER`, `SCANNED_ASSET_SERIAL`, `ASSET_TAG`, `STATUS`. The scan sets `P4_SELECT_SERIAL` to the canonical serial and triggers its Enter `keypress` dynamic action. Model notifications and `apexafterrefresh` wake verification, with a one-second fallback for hidden return flags. The matching original record ID must have a saved staged/audited/finalized status and no inserted/updated/error metadata. Full report loading does not change user filters. Return flag `P4_COUNTED_SERIAL` alone never proves success.
+## Audit scope and safety
 
-Cleanup proof requires: full pre-submit identity baseline; clean original model; precisely one new row; `inserted` metadata; blank legitimate serial and asset; exact submitted `SCANNED_ASSET_SERIAL`; identical model instance; and exactly that row in the change set. Only then call `deleteRecords` and that model's `save`, verifying no remaining changes or row. A saved/persisted error record has insufficient ownership evidence and is never automatically deleted. This intentionally trades some automatic cleanup coverage for legitimate-inventory protection.
+The page contract remains `P4_SELECT_SERIAL`, `P4_SITE`, `P4_COUNTED_SERIAL`, and `CYCLE_COUNT`, with `SERIAL_NUMBER`, `SCANNED_ASSET_SERIAL`, `ASSET_TAG` and `STATUS`. The extension reads the selected site's label and value through the page/Oracle item API, binds the local journal to that site, and checks it before each submission. Different sites require separate workspaces. Filters and server permissions remain effective.
 
-## Research sources
+One persistent Firefox background worker owns submissions. `sending` is durable before any external write; reconnection reconciles instead of blindly retrying. Success requires the original matching row, a saved staged/audited/finalized status, and clean metadata. Model events wake verification with a fallback for hidden flags. Completion rereads confirmed receipts before a local snapshot; official audit finalization remains separate.
 
-- [Microsoft Raw Input overview](https://learn.microsoft.com/en-us/windows/win32/inputdev/about-raw-input) and [using Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input): device distinction, background input via INPUTSINK. Raw Input observes rather than suppresses legacy keyboard delivery.
-- [Oracle APEX model API](https://docs.oracle.com/en/database/oracle/apex/24.1/aexjs/model.html): full fetch, metadata, notifications, change sets, delete and save. Actual company APEX version and configuration still need verification.
-- [Mozilla signing and distribution](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/): temporary development versus signed self-distribution. Signing needs an owner's Mozilla developer account and credentials; no signing restriction is bypassed.
+Automatic cleanup requires one new unsaved inserted scan-only row, exact submitted serial, no legitimate serial/asset identity, the original model, and exclusive change ownership. Persisted or ambiguous rows are never deleted automatically.
+
+## Interaction changes
+
+Scanning stays central; connection details move to Settings. Only the chosen input mode's controls appear. A deliberate USB identification step learns the device path without adding its barcode to inventory; labels show connection type and VID/PID without guessing a manufacturer. Raw paths are collapsed. Background keyboard scanners still emit foreground keystrokes; COM avoids that limitation.
+
+Recent scans, unique missing items and exceptions have separate views. Repeat scans say Already found. An optional non-modal details panel uses each CSV's actual existing fields, with system identity/timestamps read-only. Editable fields include Found/Investigation fields and Notes, Location, Owner, Assigned To when present. Drafts remain in memory through view changes. Field-level optimistic checks allow live timestamp/other-row changes while refusing conflicting detail edits. Each explicit save backs up the file and records the changed fields/login locally. Drafts are not durable until saved.
+
+Layout uses system typography, restrained color, text status labels, visible focus rings, responsive controls and horizontally scrollable records at narrow widths. It does not load external fonts, analytics or UI frameworks.
+
+## Research
+
+- [Microsoft Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/raw-input): device-specific identification and input notifications.
+- [Oracle APEX item API](https://docs.oracle.com/en/database/oracle/apex/24.1/aexjs/item.html): selected value and display-label access.
+- [GOV.UK radios](https://design-system.service.gov.uk/components/radios/): reveal only controls relevant to the selected answer.
+- [GOV.UK error messages](https://design-system.service.gov.uk/components/error-message/): actionable messages beside the relevant controls rather than a misleading global outage banner.
+
+The connected-browser tools were unavailable during this update, so no live page inspection is claimed. The user's reported successful 2.0.1 workflow is valuable live feedback; new changes still require a controlled check on the actual scanner/page.
 
 ## Validation
 
-Local checks: 14 platform-independent Python tests plus one Windows API registration check covering journal-first capture, process-restart replay, multi-CSV interruption, alias/repeat receipt identity, ambiguity, numeric/product handling, CSV format and backups, external edits, completion, burst capture, and scanner framing. Node suites simulate APEX saved statuses, page identity, canonical serial submission, repeats, ambiguity, manual edits, verified unsaved cleanup and refusal for legitimate/persisted/other edits. Coordinator tests check single-worker behavior and interrupted-write reconciliation including switching to CSV-only. No test CSV is company data; all are synthetic temporary files.
+```text
+python -m unittest discover -s tests -v
+node tests/test_apex_mock.js
+node tests/test_coordinator.js
+node tests/test_station_core.js
+python tools/package.py
+```
 
-CI is configured to run Python and Node tests on Windows/Linux, run the installer under Windows PowerShell 5.1, verify native-host registration and the actual batch-launcher protocol, check installer syntax, and exercise Windows device enumeration/Raw Input registration. Check the repository Actions tab for current results. Neither CI nor local mocks establish physical scanner or authenticated APEX compatibility. See LIVE-VERIFICATION.md for the remaining acceptance checks.
+CI runs Windows/Linux checks, actual Windows PowerShell 5.1 installation and native-launcher communication, device enumeration and Raw Input registration. Synthetic tests cover actual companion exit, persistent stop, inaccessible legacy heartbeat paths, journal replay, aliases/repeats, conflict-safe details, site-change refusal and deletion safety. Static station checks verify controls/labels and script ordering. Browser rendering and physical-device testing remain separate acceptance checks.

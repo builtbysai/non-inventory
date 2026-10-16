@@ -17,6 +17,14 @@ function Find-Python {
   if (Test-Path $candidate) { return $candidate }
   return $null
 }
+# During an upgrade, stop only a companion belonging to this exact installation.
+$existingCompanion = Join-Path $root 'app\companion.py'
+$venvScripts = Join-Path $root '.venv\Scripts'
+Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+  if ($_.ExecutablePath -and (Split-Path $_.ExecutablePath) -eq $venvScripts -and $_.CommandLine -match ('(?:^|\s)"?' + [regex]::Escape($existingCompanion) + '"?(?:\s|$)')) {
+    Stop-Process -Id $_.ProcessId -ErrorAction Stop
+  }
+}
 $python = Find-Python
 if (-not $python) {
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Install Python 3.10+ from python.org, then rerun SETUP.cmd.' }
@@ -46,7 +54,7 @@ New-Item -Path $key -Force | Out-Null
 Set-Item -Path $key -Value $manifestPath
 $companion = Join-Path $root 'app\companion.py'
 $startLauncher = Join-Path $root 'app\start_companion.cmd'
-[IO.File]::WriteAllText($startLauncher,"@echo off`r`nchcp 65001 >nul`r`nstart `"`" `"$pythonw`" `"$companion`"`r`n",$utf8)
+[IO.File]::WriteAllText($startLauncher,"@echo off`r`nchcp 65001 >nul`r`nstart `"`" `"$pythonw`" `"$companion`" --start`r`n",$utf8)
 if (-not $NoShortcut) {
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Non-Inventory.lnk'))
@@ -54,7 +62,7 @@ if (-not $NoShortcut) {
   $shortcut.WorkingDirectory = $root
   $shortcut.Save()
 }
-if (-not $NoLaunch) { Start-Process -FilePath $pythonw -ArgumentList ('"' + $companion + '"') }
+if (-not $NoLaunch) { Start-Process -FilePath $pythonw -ArgumentList ('"' + $companion + '" --start') }
 Write-Host 'Setup complete. No administrator rights required.' -ForegroundColor Green
 Write-Host 'Firefox: about:debugging > This Firefox > Load Temporary Add-on > extension\manifest.json'
 Write-Host 'Open station from extension icon. Save login and scanner settings before scanning.'

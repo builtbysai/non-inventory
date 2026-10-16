@@ -1,33 +1,53 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Non Inventory / Scan Station</title><link rel="stylesheet" href="station.css"></head>
-<body><div class="app">
-<header class="mast"><div><span class="kicker">FIELD IT / SPA1</span><h1>Inventory scan station<span class="v">02</span></h1></div><div class="topright"><span id="state" class="state" role="status">Checking local engine</span><button id="pause" class="small">Pause <kbd>F9</kbd></button></div></header>
-<main class="grid"><section class="station" aria-labelledby="sectionTitle">
-  <div class="section-line"><h2 id="sectionTitle">Live scanning</h2><span id="modeText">Local input</span></div>
-  <label for="serial" class="scanlabel">READY FOR BARCODE</label>
-  <div class="scan-wrap"><span aria-hidden="true" class="target">└</span><input id="serial" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-describedby="scannerHint" placeholder="Scan serial · Enter" autofocus><span aria-hidden="true" class="target">┘</span></div>
-  <p id="scannerHint" class="hint">USB handheld scanner. Enter suffix recommended. F8 returns focus here. Scans save locally before the official site is updated.</p>
-  <div id="result" class="result" role="status" aria-live="polite"><span id="symbol" class="symbol">●</span><div><strong id="resultTitle">Ready</strong><p id="resultMessage">Connect the official audit in the right panel, then start scanning.</p></div></div>
-  <div class="numbers" aria-label="Session totals"><div><strong id="countScanned">0</strong><span>Captured</span></div><div><strong id="countFound">0</strong><span>Unique missing found</span></div><div><strong id="countAudited">0</strong><span>Confirmed audited</span></div><div><strong id="countQueued">0</strong><span>Audit pending</span></div></div>
-  <div class="section-line loghead"><h2>Recent activity</h2><span>Newest first</span></div>
-  <ol id="activity" class="activity"><li>No scans yet.</li></ol>
-</section><aside class="side"><h2>Setup & controls</h2>
-  <label class="setting-label" for="login">Technician login</label><input type="text" id="login" maxlength="80" autocomplete="username" placeholder="Enter your login">
-  <label class="setting-label" for="inputMode">Scanner input</label>
-<select id="inputMode"><option value="station">Focused scan field (USB keyboard)</option><option value="hid">Windows device-specific HID (background)</option><option value="com">COM port (recommended)</option></select>
-<label class="setting-label" for="device">HID scanner device</label><select id="device" aria-label="HID device"></select><button id="devicesRefresh">Refresh scanner devices</button>
-<p class="help">Select the scanner's VID/PID, never your typing keyboard. HID also types into the foreground app; keep the station focused or use COM.</p>
-<label class="setting-label" for="comPort">COM port / baud</label><input id="comPort" value="COM3" aria-label="COM port"><select id="baud" aria-label="COM baud rate"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select>
-<label class="toggle"><input id="captureEnabled" type="checkbox" checked> <span>Capture device scans (continues if Firefox closes)</span></label>
-<button id="saveInput">Save scanner settings</button><p id="health" class="help" role="status"></p>
-<label class="setting-label" for="tabs">Inventory browser tab</label><div class="tabrow"><select id="tabs" aria-label="Official inventory tab"></select><button id="refresh" title="Refresh browser tabs" aria-label="Refresh browser tabs">↻</button></div>
-  <button class="primary" id="connect">Connect official audit</button><p id="auditInfo" class="help">Open your company's Field IT Audit Count page in Firefox and select SPA1.</p>
-  <div class="rule"></div>
-  <label class="toggle"><input id="csvOnly" type="checkbox"> <span>Investigation only (do not update official audit)</span></label>
-  <label class="toggle"><input id="voice" type="checkbox" checked> <span>Voice and audio feedback</span></label>
-  <div class="rule"></div><h3>Original investigation files</h3><div id="files" class="files">Checking files…</div>
-  <p class="help">Found date and login update as the durable queue is processed. Files, backups and the recovery journal remain on this computer.</p>
-  <div class="rule"></div><div class="reviewbuttons"><button id="review">Found items / Edit details</button><button id="exceptions">Pending & exceptions</button><button id="complete">Reconcile & complete</button></div>
-</aside></main>
-<footer><span>OFFLINE CAPTURE / OFFICIAL SITE VIA AUTHENTICATED FIREFOX TAB</span><span id="footer">Initializing…</span></footer></div>
-<dialog id="dialog"><div class="dialogtop"><h2 id="dialogTitle">Review</h2><button id="close" aria-label="Close dialog">Close</button></div><div id="dialogBody"></div></dialog>
-<script src="station.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Non-Inventory</title><link rel="stylesheet" href="station.css"></head>
+<body>
+<header class="topbar">
+  <a class="brand" href="station.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v16M6 4v16M10 4v16M12 4v16M16 4v16M20 4v16" fill="none" stroke="currentColor" stroke-width="2"/></svg>Non-Inventory</a>
+  <span class="site" id="siteLabel">Local investigation</span>
+  <div class="header-actions"><span class="connection" id="connection">Connecting…</span><button id="settingsButton" class="quiet">Settings</button><button id="runButton" class="primary">Start scanning</button></div>
+</header>
+<main id="workspace">
+  <section class="page-heading"><div><h1>Scan inventory</h1><p id="sessionInfo">Every confirmed capture is saved on this computer.</p></div><button id="auditPause" class="quiet">Pause audit <kbd>F9</kbd></button></section>
+  <section class="capture-panel" aria-label="Barcode capture">
+    <div class="capture-top"><label for="serial">Barcode</label><span id="modeLabel">This scan field</span></div>
+    <div class="scan-control"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5M7 7v10m4-10v10m3-10v10m3-10v10" stroke="currentColor" fill="none" stroke-width="1.5"/></svg><input id="serial" aria-describedby="scanHint" placeholder="Scan a barcode, then Enter" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="focusButton" class="quiet">Focus <kbd>F8</kbd></button></div>
+    <p id="scanHint" class="hint">Keep this field focused. Your scanner should append Enter.</p>
+    <div id="feedback" class="feedback" role="status" aria-live="polite"><span class="feedback-mark" aria-hidden="true">•</span><div><strong id="feedbackTitle">Ready when you are</strong><span id="feedbackText">Save your login in Settings, then start scanning.</span></div><button id="feedbackDetails" class="text-button" hidden>Add details</button></div>
+  </section>
+  <section class="totals" aria-label="Session totals"><div><strong id="capturedCount">0</strong><span>Captured</span></div><div><strong id="foundCount">0</strong><span>Missing found</span></div><div><strong id="repeatCount">0</strong><span>Repeat scans</span></div><div><strong id="auditCount">0</strong><span>Audited items</span></div><div><strong id="pendingCount">0</strong><span>Pending audit</span></div></section>
+  <section class="records">
+    <div class="records-toolbar"><nav class="view-tabs" aria-label="Scan views"><button id="tabRecent" aria-pressed="true">Recent scans</button><button id="tabFound" aria-pressed="false">Missing found</button><button id="tabReview" aria-pressed="false">Review <span id="reviewCount" class="count">0</span></button></nav><button id="completeButton" class="quiet">Reconcile & finish</button></div>
+    <p id="viewHint" class="view-hint">Latest 35 captures. The full history stays in your local journal.</p>
+    <div class="table-wrap"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table><div id="emptyState" class="empty" hidden><strong>No scans yet</strong><p>Captured items will appear here as you scan.</p></div></div>
+  </section>
+  <footer><span id="localStatus">Checking local companion…</span><span id="auditStatus">Official audit not connected</span></footer>
+</main>
+<aside id="detailDrawer" class="drawer" aria-labelledby="detailTitle" hidden>
+  <div class="drawer-heading"><div><span class="eyebrow">Investigation details</span><h2 id="detailTitle"></h2></div><button id="detailClose" class="quiet" aria-label="Close investigation details">Close</button></div>
+  <p class="hint">Optional. Keep scanning and return to this item later. <span id="detailFocusHint">F8 returns to the scan field.</span></p>
+  <label for="detailRecord">Monthly record</label><select id="detailRecord"></select>
+  <form id="detailForm"><div id="detailFields" class="form-fields"></div><details><summary>Original inventory fields</summary><dl id="detailReadOnly" class="key-values"></dl></details><p id="detailMessage" class="inline-message" role="status"></p><div class="drawer-buttons"><button id="detailSave" class="primary" type="submit">Save details</button><button id="detailReload" class="quiet" type="button">Reload record</button></div></form>
+</aside>
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <div class="dialog-heading"><h2 id="settingsTitle">Settings</h2><button id="settingsClose" class="quiet">Close</button></div>
+  <form id="settingsForm">
+    <section class="settings-section"><h3>Operator</h3><label for="login">Your login</label><input id="login" maxlength="80" autocomplete="username" required><p class="hint">Recorded with found items. Saved only on this computer.</p></section>
+    <section class="settings-section"><h3>Scanner</h3><fieldset id="modeChoices"><legend class="sr-only">Scanner input</legend>
+      <label class="radio-choice"><input type="radio" name="inputMode" value="station" checked><span><strong>This scan field</strong><small>Standard USB scanner. Keep the barcode field focused.</small></span></label>
+      <label class="radio-choice"><input type="radio" name="inputMode" value="hid"><span><strong>Background USB</strong><small>Capture from one device even outside Firefox.</small></span></label>
+      <label class="radio-choice"><input type="radio" name="inputMode" value="com"><span><strong>Serial port (COM)</strong><small>Background capture without typing into other applications.</small></span></label>
+    </fieldset>
+    <div id="hidOptions" class="conditional" hidden><button type="button" id="identifyButton">Identify my scanner</button><p id="identifyHint" class="hint" role="status">Click Identify, then scan one barcode. Do not type on your keyboard. This setup scan is not added to inventory.</p><input id="identifyInput" readonly aria-label="Scanner identification focus" placeholder="Scan one barcode after clicking Identify" hidden><label for="device">Selected USB device</label><select id="device"><option value="">Choose or identify a device</option></select><p class="hint">Keyboard-mode scanners also type into the foreground app. Keep this station focused, or use COM.</p><details><summary>Device connection details</summary><code id="devicePath">No device selected</code><button id="devicesRefresh" type="button" class="text-button">Refresh devices</button></details></div>
+    <div id="comOptions" class="conditional" hidden><label for="comPort">Port</label><input id="comPort" list="ports" placeholder="COM3"><datalist id="ports"></datalist><label for="baud">Baud rate</label><select id="baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select><p class="hint">Match your scanner settings. Use Enter, CR/LF or Tab as its suffix.</p></div>
+    </section>
+    <section class="settings-section"><h3>Official audit</h3><label class="check"><input id="csvOnly" type="checkbox">Investigation only · leave the official audit unchanged</label><div id="auditOptions"><label for="auditTab">Inventory browser tab</label><div class="input-action"><select id="auditTab"></select><button id="refreshTabs" type="button" class="quiet">Refresh</button></div><button id="connectButton" type="button">Connect selected audit</button><p id="auditInfo" class="hint" role="status">The selected site is read from your inventory page. No site is assumed.</p></div></section>
+    <section class="settings-section"><h3>Feedback</h3><label class="check"><input id="voice" type="checkbox">Speak scan results</label><p class="hint">Distinct capture, repeat, found and error tones are always available while this station is open.</p></section>
+    <section class="settings-section"><h3>Investigation files</h3><ul id="files" class="file-list"></ul><p class="hint">Original CSVs, backups and the scan journal stay in your workspace folder.</p></section>
+    <p id="settingsMessage" class="inline-message" role="status"></p><div class="dialog-buttons"><button class="primary" type="submit">Save settings</button></div>
+  </form>
+</dialog>
+<dialog id="reviewDialog" aria-labelledby="reviewTitle"><div class="dialog-heading"><h2 id="reviewTitle">Resolve scan</h2><button id="reviewClose" class="quiet">Close</button></div><p id="reviewDescription"></p><form id="reviewForm"><label for="resolution">What did you verify on the official site?</label><textarea id="resolution" required minlength="5" rows="4"></textarea><p id="reviewMessage" class="inline-message" role="status"></p><button type="submit" class="primary">Record resolution</button></form></dialog>
+<script src="station-core.js"></script>
+<script src="station.js"></script>
+</body></html>

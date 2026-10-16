@@ -1,5 +1,13 @@
-Tonight-readiness fixes: reliable Python detection in Windows PowerShell 5.1, heartbeat sharing conflicts no longer stop the companion, and input-mode changes cannot capture through a stale device callback.
+Non-Inventory 2.1 — follow-up to the working 2.0.x release.
 
-Download **non-inventory-2.0.1.zip**, extract it and run **SETUP.cmd**. Windows/Linux CI includes an actual Windows installation, native-host registration and batch-launcher protocol check, plus CSV recovery and simulated APEX tests.
+- Stop now exits the companion and survives browser reconnections.
+- Status uses SQLite, removing heartbeat-file permission conflicts.
+- Cleaner responsive station: scanning, found items, review and settings are separated.
+- Scanner settings show only relevant controls; USB identification replaces guessing raw device paths.
+- Missing-item repeats display Already found and refresh last-seen without increasing unique-found count.
+- Reads the selected APEX site and blocks site changes instead of assuming SPA1.
+- Optional monthly-record details panel with drafts, field-level conflict protection, backups and edit history.
 
-The Firefox extension remains unsigned; use temporary installation. No signing is required for tonight. Physical scanner and authenticated APEX behavior still require the short live-test checklist. No company inventory or credentials are included.
+Download **non-inventory-2.1.0.zip**. After the current audit, follow the upgrade instructions to preserve your existing workspace. Run SETUP.cmd and reload the temporary Firefox extension. No Mozilla signing is required for temporary use.
+
+Windows/Linux automated checks include actual process stop/restart, native launcher installation, replay recovery, repeat recognition, concurrent detail edits, site-change refusal and simulated APEX responses. Physical-device behavior and authenticated live-page changes still need a short controlled check.

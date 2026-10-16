@@ -56,7 +56,28 @@ def devices():
     arr=(DEV*n.value)();U.GetRawInputDeviceList(arr,C.byref(n),C.sizeof(DEV))
     return sorted({device_name(d.handle) for d in arr if d.kind==1})
 
-def raw_input(get_config,capture,health):
+def device_label(path):
+    import re
+    match=re.search(r'VID_([0-9A-F]{4}).*?PID_([0-9A-F]{4})',path,re.I)
+    if match:return f"USB input · {match[1].upper()}:{match[2].upper()}"
+    if 'ACPI#' in path.upper():return 'Built-in keyboard / system controls'
+    if 'RDP' in path.upper():return 'Remote desktop keyboard'
+    return 'Keyboard input device'
+
+def device_choices():
+    labels={};result=[]
+    for path in devices():
+        label=device_label(path);labels[label]=labels.get(label,0)+1
+        suffix=f" · interface {labels[label]}" if labels[label]>1 else ''
+        result.append({'path':path,'label':label+suffix})
+    ports=[]
+    try:
+        from serial.tools import list_ports
+        ports=[{'port':p.device,'label':f'{p.device} · {p.description}'} for p in list_ports.comports()]
+    except ImportError:pass
+    return {'devices':result,'ports':ports}
+
+def raw_input(get_config,capture,health,identify=None):
     if os.name!='nt':health('HID requires Windows');return
     state={};keys=(C.c_ubyte*256)();framers={}
     @PROC
@@ -65,7 +86,8 @@ def raw_input(get_config,capture,health):
         if msg==0xff:
             try:
                 cfg=get_config()
-                if cfg.get('input_mode')=='hid' and cfg.get('capture_enabled',True) and cfg.get('device'):
+                identifying=cfg.get('identify_until',0)>time.time()
+                if identifying or (cfg.get('input_mode')=='hid' and cfg.get('capture_enabled',True) and cfg.get('device')):
                     n=W.UINT();U.GetRawInputData(W.HANDLE(lp),0x10000003,None,C.byref(n),C.sizeof(HEADER))
                     buf=C.create_string_buffer(n.value)
                     if U.GetRawInputData(W.HANDLE(lp),0x10000003,buf,C.byref(n),C.sizeof(HEADER))!=0xffffffff:
@@ -73,12 +95,16 @@ def raw_input(get_config,capture,health):
                         if h.kind==1:
                             name=state.get(h.device)
                             if name is None:name=device_name(h.device);state[h.device]=name
-                            if name==cfg['device']:
+                            if identifying or name==cfg.get('device'):
                                 k=KEY.from_buffer_copy(buf,C.sizeof(HEADER));up=bool(k.flags&1)
                                 keys[k.vk]=0 if up else 128
                                 if k.vk in (160,161):keys[16]=keys[k.vk]
                                 if not up:
-                                    frame=framers.setdefault(name,Framer(capture))
+                                    def received(raw,device=name):
+                                        if identifying:
+                                            if identify:identify(device)
+                                        else:capture(raw)
+                                    frame=framers.setdefault(name,Framer(received));frame.callback=received
                                     if k.vk in (13,9):frame.feed('\r')
                                     else:
                                         out=C.create_unicode_buffer(8)
