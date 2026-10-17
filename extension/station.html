@@ -16,10 +16,13 @@
     <div id="feedback" class="feedback" role="status" aria-live="polite"><span class="feedback-mark" aria-hidden="true">•</span><div><strong id="feedbackTitle">Ready when you are</strong><span id="feedbackText">Save your login in Settings, then start scanning.</span></div><button id="feedbackDetails" class="text-button" hidden>Add details</button></div>
   </section>
   <section class="totals" aria-label="Session totals"><div><strong id="capturedCount">0</strong><span>Captured</span></div><div><strong id="foundCount">0</strong><span>Missing found</span></div><div><strong id="repeatCount">0</strong><span>Repeat scans</span></div><div><strong id="auditCount">0</strong><span>Audited items</span></div><div><strong id="pendingCount">0</strong><span>Pending audit</span></div></section>
+  <div id="draftRecovery" class="recovery-bar" hidden><span id="draftRecoveryText"></span><button id="recoverDraft" class="text-button">Resume details</button></div>
   <section class="records">
     <div class="records-toolbar"><nav class="view-tabs" aria-label="Scan views"><button id="tabRecent" aria-pressed="true">Recent scans</button><button id="tabFound" aria-pressed="false">Missing found</button><button id="tabReview" aria-pressed="false">Review <span id="reviewCount" class="count">0</span></button></nav><button id="completeButton" class="quiet">Reconcile & finish</button></div>
+    <div class="history-tools"><label for="historySearch" class="sr-only">Find a serial or asset ID</label><input id="historySearch" type="search" placeholder="Find a serial or asset ID" autocomplete="off"><span id="historyTotal" class="hint"></span></div>
     <p id="viewHint" class="view-hint">Latest 35 captures. The full history stays in your local journal.</p>
     <div class="table-wrap"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table><div id="emptyState" class="empty" hidden><strong>No scans yet</strong><p>Captured items will appear here as you scan.</p></div></div>
+    <div class="pagination"><button id="previousPage" class="quiet">Previous</button><span id="pageInfo"></span><button id="nextPage" class="quiet">Next</button></div>
   </section>
   <footer><span id="localStatus">Checking local companion…</span><span id="auditStatus">Official audit not connected</span></footer>
 </main>
@@ -27,7 +30,7 @@
   <div class="drawer-heading"><div><span class="eyebrow">Investigation details</span><h2 id="detailTitle"></h2></div><button id="detailClose" class="quiet" aria-label="Close investigation details">Close</button></div>
   <p class="hint">Optional. Keep scanning and return to this item later. <span id="detailFocusHint">F8 returns to the scan field.</span></p>
   <label for="detailRecord">Monthly record</label><select id="detailRecord"></select>
-  <form id="detailForm"><div id="detailFields" class="form-fields"></div><details><summary>Original inventory fields</summary><dl id="detailReadOnly" class="key-values"></dl></details><p id="detailMessage" class="inline-message" role="status"></p><div class="drawer-buttons"><button id="detailSave" class="primary" type="submit">Save details</button><button id="detailReload" class="quiet" type="button">Reload record</button></div></form>
+  <form id="detailForm"><div id="detailFields" class="form-fields"></div><details><summary>Original inventory fields</summary><dl id="detailReadOnly" class="key-values"></dl></details><p id="draftStatus" class="hint" role="status"></p><p id="detailMessage" class="inline-message" role="status"></p><div class="drawer-buttons"><button id="detailSave" class="primary" type="submit">Save details</button><button id="detailReload" class="quiet" type="button">Discard draft & reload</button></div></form>
 </aside>
 <dialog id="settings" aria-labelledby="settingsTitle">
   <div class="dialog-heading"><h2 id="settingsTitle">Settings</h2><button id="settingsClose" class="quiet">Close</button></div>

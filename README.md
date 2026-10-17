@@ -17,7 +17,9 @@ Continuous barcode scanning for missing-inventory investigation and your Oracle 
 
 **Start scanning** starts the companion. **Stop scanning** or **STOP.cmd** exits it and retains the queue; it stays stopped until explicitly started. **F9** pauses only website submissions. **F8** returns focus to Barcode. Start after reboot with **START.cmd**.
 
-**Missing found** shows unique items. Repeats say **Already found**, refresh last-seen/login, and count separately. Click **Add details** for a side form with the actual monthly record's investigation fields. Drafts stay in memory while you scan; edits merge around timestamp updates and detect conflicting field changes. Original inventory fields remain read-only. COM allows scanning while editing; keyboard scanners require returning focus with F8 or editing between batches.
+**Missing found** shows unique items. Repeats say **Already found**, refresh last-seen/login, and count separately. Click **Add details** for a side form with the actual monthly record's investigation fields. Drafts autosave locally and can be resumed after Firefox restarts; edits merge around timestamp updates and detect conflicting field changes. Original inventory fields remain read-only. COM allows scanning while editing; keyboard scanners require returning focus with F8 or editing between batches.
+
+Use the search field and page controls to find any prior scan or asset ID. The header warns when Barcode is not focused or a scanner is reconnecting.
 
 Use **Review** for exceptions, then **Reconcile & finish**. Finalize the official audit separately. Journal and backups remain in `workspace\`; keep the entire folder private.
 

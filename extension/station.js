@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const UI=window.StationUI;
-const state={config:{},running:false,paused:true,connected:false,view:'recent',tabs:[],devices:[],seen:new Set(),initialized:false,refreshing:false,drawer:null,drafts:new Map(),feedbackSerial:null,resolutionId:null,identifying:false};
+const state={config:{},running:false,paused:true,connected:false,view:'recent',tabs:[],devices:[],seen:new Set(),initialized:false,refreshing:false,drawer:null,drafts:new Map(),feedbackSerial:null,resolutionId:null,identifying:false,offset:0,query:'',pageSize:50,tableSignature:null,pendingDrafts:new Map(),draftTimer:null,draftSaving:null,draftRetryAt:0,draftSummaries:[],health:{}};
 async function send(message){
   const result=await browser.runtime.sendMessage(message);
   if(!result?.ok)throw new Error(result?.message||result?.error||'Local connection unavailable.');
@@ -45,7 +45,10 @@ function updateCapture(){
   $('modeLabel').textContent=({station:'This scan field',hid:'Background USB',com:'Serial port · '+(state.config.port||'')})[mode];
   $('scanHint').textContent=!state.running?'Start scanning to resume. Your saved queue is retained.':mode==='station'?'Keep this field focused. Your scanner should append Enter.':'Scans are captured by the companion. Keep this window open for feedback.';
   $('runButton').textContent=state.running?'Stop scanning':'Start scanning';$('runButton').className=state.running?'danger':'primary';
-  $('connection').textContent=state.running?'Companion running':'Stopped';$('connection').className='connection '+(state.running?'running':'');
+  const readiness=UI.readiness(state.running,state.config,state.health,document.activeElement===$('serial')&&document.hasFocus());
+  $('connection').textContent=readiness.label;$('connection').className='connection '+readiness.kind;
+  $('serial').closest('.scan-control').classList.toggle('unfocused',state.running&&mode==='station'&&!readiness.ready);
+  if(state.running&&!readiness.ready)$('scanHint').textContent=readiness.hint;
   $('auditPause').textContent=state.paused?'Resume audit · F9':'Pause audit · F9';
 }
 async function capture(raw){
@@ -59,21 +62,24 @@ function cell(row,text,className=''){const td=document.createElement('td');td.te
 function statusCell(row,label,kind=''){
   const td=document.createElement('td'),span=document.createElement('span');span.className='status '+kind;span.textContent=label;td.append(span);row.append(td);return td;
 }
-function detailsButton(row,serial){const td=document.createElement('td'),button=document.createElement('button');button.className='text-button';button.textContent='Add details';button.onclick=()=>openDetails(serial);td.append(button);row.append(td);}
+function detailsButton(row,serial){const td=document.createElement('td'),button=document.createElement('button');button.className='text-button';button.textContent='Add details';button.dataset.focusKey='details:'+(row.dataset.key||serial);button.onclick=()=>openDetails(serial);td.append(button);row.append(td);}
 async function renderRecords(status){
-  const view=state.view;
-  if($('tableBody').contains(document.activeElement))return;
+  const view=state.view,query=state.query,offset=state.offset;
+  const page=await host({action:'history',view,query,offset,limit:state.pageSize});
+  if(state.view!==view||state.query!==query||state.offset!==offset)return;
+  const records=page.items;
+  $('historyTotal').textContent=page.total+' '+(view==='found'?'items':'scans');
+  $('previousPage').disabled=offset===0;$('nextPage').disabled=offset+records.length>=page.total;
+  $('pageInfo').textContent=page.total?(offset+1)+'–'+(offset+records.length)+' of '+page.total:'No results';
+  $('viewHint').textContent=view==='recent'?'All captured scans, newest first. Search by serial or scanned asset ID.':view==='found'?'One row per missing item. Repeat scans refresh last-seen; details are optional.':'Pending work and exceptions. Resolve only after checking the official inventory.';
+  const signature=JSON.stringify({view,records});if(signature===state.tableSignature)return;state.tableSignature=signature;
+  const focused=document.activeElement;
+  const focusKey=$('tableBody').contains(focused)?focused.dataset.focusKey:null;
   $('tableHead').replaceChildren();$('tableBody').replaceChildren();
   const columns=view==='recent'?['Serial / asset','Missing inventory','Official audit','Captured','']:view==='found'?['Serial','Monthly investigation','Last seen','Scans','']:['Serial / asset','What needs attention','Captured',''];
   const heading=document.createElement('tr');for(const label of columns){const th=document.createElement('th');th.scope='col';th.textContent=label;heading.append(th);}$('tableHead').append(heading);
-  let records;
-  if(view==='recent')records=status.recent;
-  else if(view==='found')records=(await host({action:'found_list'})).found;
-  else records=(await host({action:'exceptions'})).exceptions;
-  $('viewHint').textContent=view==='recent'?'Latest 35 captures. The full history stays in your local journal.':view==='found'?'One row per missing item. Repeat scans refresh last-seen; details are optional.':'Pending work and exceptions. Resolve only after checking the official inventory.';
-  if(state.view!==view)return;
   for(const item of records){
-    const row=document.createElement('tr');cell(row,item.serial,'serial-value');
+    const row=document.createElement('tr');row.dataset.key=item.id||item.serial;cell(row,item.serial,'serial-value');
     if(view==='recent'){
       const [label,kind]=UI.missing(item);const missing=statusCell(row,label,kind);
       if(item.repeat&&item.investigation==='found'){const sub=document.createElement('small');sub.className='subtext';sub.textContent='Last-seen refreshed';missing.append(sub);}
@@ -86,10 +92,11 @@ async function renderRecords(status){
       const td=cell(row,item.csv_error||item.detail||UI.audit[item.audit]?.[0]||item.audit);td.style.maxWidth='420px';
       cell(row,UI.time(item.scanned_at),'time');const action=document.createElement('td');
       if(['needs_review','not_in_audit','offline'].includes(item.audit)&&item.csv_state==='done'){
-        const button=document.createElement('button');button.className='text-button';button.textContent='Resolve';button.onclick=()=>openResolution(item);action.append(button);
+        const button=document.createElement('button');button.className='text-button';button.textContent='Resolve';button.dataset.focusKey='resolve:'+item.id;button.onclick=()=>openResolution(item);action.append(button);
       }row.append(action);
     }$('tableBody').append(row);
   }
+  if(focusKey){const target=[...$('tableBody').querySelectorAll('button')].find(button=>button.dataset.focusKey===focusKey);target?.focus({preventScroll:true});}
   $('emptyState').hidden=records.length>0;
   $('emptyState').querySelector('strong').textContent=view==='review'?'Nothing to review':view==='found'?'No missing items found yet':'No scans yet';
   $('emptyState').querySelector('p').textContent=view==='review'?'New exceptions will appear here.':'Keep scanning. Items will appear automatically.';
@@ -100,7 +107,7 @@ async function refresh(){
     const status=await host({action:'status'}),config=(await host({action:'config'})).config;
     const health=(await host({action:'health'})).health;
     const options=await browser.storage.local.get(['connected','paused','auditSite']);
-    state.config=config;state.running=health.running&&config.companion_enabled!==false;state.paused=options.paused!==false;state.connected=options.connected===true;
+    state.config=config;state.health=health;state.running=health.running&&config.companion_enabled!==false;state.paused=options.paused!==false;state.connected=options.connected===true;
     updateCapture();
     const site=options.auditSite||config.audit_site;
     $('siteLabel').textContent=site?site.label:'Local investigation';
@@ -130,6 +137,7 @@ async function refresh(){
         $('identifyHint').textContent='Device identified. Save settings to use it. Your setup scan was not added to inventory.';$('identifyButton').disabled=false;$('identifyInput').hidden=true;
       }else if(config.identify_until<Date.now()/1000){state.identifying=false;$('identifyButton').disabled=false;$('identifyInput').hidden=true;$('identifyHint').textContent='No complete scan received. Try again and scan a barcode with an Enter suffix.';}
     }
+    if(state.pendingDrafts.size&&!state.draftTimer&&!state.draftSaving&&Date.now()>=state.draftRetryAt)state.draftTimer=setTimeout(()=>void flushDrafts().catch(()=>{}),450);
     await renderRecords(status);
   }catch(e){$('connection').textContent='Connection needs attention';$('connection').className='connection error';$('localStatus').textContent=e.message;}
   finally{state.refreshing=false;}
@@ -181,28 +189,62 @@ async function saveSettings(event){
     $('settings').close();await refresh();feedback('','Settings saved',state.running?'Continue scanning.':'Select Start scanning when ready.');focusScan();
   }catch(e){$('settingsMessage').textContent=e.message;}
 }
+function draftKey(record){return state.drawer.serial+'|'+record.file+':'+record.row;}
+async function refreshDraftSummaries(){
+  state.draftSummaries=(await host({action:'drafts'})).drafts;
+  $('draftRecovery').hidden=!state.draftSummaries.length;
+  $('draftRecoveryText').textContent=state.draftSummaries.length+' saved detail draft(s). Changes have not been applied to CSVs.';
+}
+async function flushDrafts(){
+  clearTimeout(state.draftTimer);state.draftTimer=null;
+  if(state.draftSaving){await state.draftSaving;if(state.pendingDrafts.size)return flushDrafts();return;}
+  if(!state.pendingDrafts.size)return;
+  state.draftSaving=(async()=>{
+    for(const [key,entry] of [...state.pendingDrafts]){
+      await host({action:'draft_save',serial:entry.serial,file:entry.file,row:entry.row,payload:entry.payload});
+      if(state.pendingDrafts.get(key)===entry)state.pendingDrafts.delete(key);
+    }
+    $('draftStatus').textContent='Draft saved on this computer. Not yet applied to CSV.';
+    await refreshDraftSummaries();
+  })();
+  try{await state.draftSaving;}
+  catch(e){state.draftRetryAt=Date.now()+5000;$('draftStatus').textContent='Draft not saved yet: '+e.message+' Keep this window open.';throw e;}
+  finally{state.draftSaving=null;}
+}
 function rememberDraft(){
   if(!state.drawer)return;
-  const record=state.drawer.records[Number($('detailRecord').value)];if(!record)return;
+  const record=state.drawer.records[Number($('detailRecord').value)];if(!record||record.missing)return;
   const values={};for(const field of $('detailFields').querySelectorAll('[data-field]'))values[field.dataset.field]=field.value;
-  const previous=state.drafts.get(record.file+':'+record.row);
-  state.drafts.set(record.file+':'+record.row,{version:previous?.version||record.version,original:previous?.original||record.values,values});
+  const previous=state.drafts.get(draftKey(record));
+  const payload={version:previous?.version||record.version,original:previous?.original||record.values,values};
+  state.drafts.set(draftKey(record),payload);
+  state.pendingDrafts.set(draftKey(record),{serial:state.drawer.serial,file:record.file,row:record.row,payload});
+  $('draftStatus').textContent='Saving draft locally…';clearTimeout(state.draftTimer);
+  state.draftTimer=setTimeout(()=>void flushDrafts().catch(()=>{}),450);
 }
 function renderDetails(){
   const record=state.drawer.records[Number($('detailRecord').value)];$('detailFields').replaceChildren();$('detailReadOnly').replaceChildren();$('detailMessage').textContent='';
   if(!record){$('detailSave').disabled=true;$('detailMessage').textContent='No matching monthly record.';return;}
-  const draft=state.drafts.get(record.file+':'+record.row);$('detailSave').disabled=!record.editable.length;
+  const draft=state.drafts.get(draftKey(record));$('draftStatus').textContent=draft?'Recovered local draft. Save details to apply it to the CSV.':'';$('detailSave').disabled=record.missing||!record.editable.length;
   for(const name of record.fields){
     if(record.editable.includes(name)){
       const label=document.createElement('label');label.textContent=name;
-      const field=document.createElement(/notes/i.test(name)?'textarea':'input');field.dataset.field=name;field.value=draft?.values[name]??record.values[name];field.maxLength=4000;field.setAttribute('aria-label',name);field.oninput=rememberDraft;label.append(field);$('detailFields').append(label);
+      const field=document.createElement(/notes/i.test(name)?'textarea':'input');field.dataset.field=name;field.readOnly=record.missing===true;field.value=draft?.values[name]??record.values[name];field.maxLength=4000;field.setAttribute('aria-label',name);field.oninput=rememberDraft;label.append(field);$('detailFields').append(label);
     }else{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=record.values[name]||'—';$('detailReadOnly').append(dt,dd);}
   }
-  if(!record.editable.length)$('detailMessage').textContent='This CSV has no editable investigation fields. Original inventory values are read-only.';
+  if(record.missing)$('detailMessage').textContent='The original monthly row moved or is unavailable. Your saved draft is shown for copying. Discard only when you no longer need it.';
+  else if(!record.editable.length)$('detailMessage').textContent='This CSV has no editable investigation fields. Original inventory values are read-only.';
 }
 async function openDetails(serial){
   try{
-    rememberDraft();const result=await host({action:'investigation',serial});state.drawer=result;
+    rememberDraft();await flushDrafts();
+    const saved=(await host({action:'drafts',serial})).drafts;
+    for(const draft of saved)state.drafts.set(draft.key,draft.payload);
+    const result=await host({action:'investigation',serial});
+    for(const draft of saved){
+      if(!result.records.some(record=>record.file===draft.file&&record.row===draft.row_index))result.records.push({file:draft.file,row:draft.row_index,version:draft.payload.version,values:draft.payload.original,fields:Object.keys(draft.payload.values),editable:Object.keys(draft.payload.values),missing:true});
+    }
+    state.drawer=result;
     $('detailFocusHint').textContent=state.config.input_mode==='com'?'Serial capture continues while you edit.':state.config.input_mode==='hid'?'USB keyboard scanners also type into focused fields. Use COM to scan while editing, or edit between batches.':'F8 returns to the scan field. Your draft stays here.';
     $('detailTitle').textContent=serial;$('detailRecord').replaceChildren();
     result.records.forEach((record,index)=>{const option=document.createElement('option');option.value=index;option.textContent=record.file;$('detailRecord').append(option);});
@@ -211,16 +253,22 @@ async function openDetails(serial){
   }catch(e){error(e.message);}
 }
 async function saveDetails(event){
-  event.preventDefault();rememberDraft();const record=state.drawer.records[Number($('detailRecord').value)];if(!record)return;
-  const key=record.file+':'+record.row,draft=state.drafts.get(key);const changes=UI.changedValues(record.values,draft?.values||{});
+  event.preventDefault();rememberDraft();
+  const record=state.drawer.records[Number($('detailRecord').value)];if(!record)return;
+  const key=draftKey(record),draft=state.drafts.get(key);const changes=UI.changedValues(draft?.original||record.values,draft?.values||{});
   if(!Object.keys(changes).length){$('detailMessage').textContent='No changes to save.';return;}
+  const controls=[...$('detailForm').querySelectorAll('input,textarea,button')];controls.push($('detailRecord'));
+  const previousDisabled=controls.map(control=>control.disabled);controls.forEach(control=>{control.disabled=true;});
   try{
+    await flushDrafts();
     const result=await host({action:'save_investigation',serial:state.drawer.serial,file:record.file,row:record.row,version:draft?.version||record.version,changes,expected:draft?.original||record.values,username:state.config.username});
-    state.drafts.delete(key);const selected=$('detailRecord').value;
+    state.drafts.delete(key);state.pendingDrafts.delete(key);await host({action:'draft_delete',key});await refreshDraftSummaries();const selected=$('detailRecord').value;
     state.drawer=await host({action:'investigation',serial:state.drawer.serial});$('detailRecord').value=selected;renderDetails();
-    $('detailMessage').className='inline-message success';$('detailMessage').textContent=result.updated+' field(s) saved. Original file backed up.';
+    $('detailMessage').className='inline-message success';$('detailMessage').textContent=result.updated?result.updated+' field(s) saved. Original file backed up.':'These changes were already saved.';
   }catch(e){$('detailMessage').className='inline-message';$('detailMessage').textContent=e.message+' Your draft is kept here.';}
+  finally{controls.forEach((control,index)=>{control.disabled=previousDisabled[index];});}
 }
+
 function closeDetails(){rememberDraft();$('detailDrawer').hidden=true;document.body.classList.remove('drawer-open');focusScan();}
 function openResolution(item){state.resolutionId=item.id;$('reviewTitle').textContent='Resolve '+item.serial;$('reviewDescription').textContent=item.detail||item.csv_error||item.audit;$('resolution').value='';$('reviewMessage').textContent='';$('reviewDialog').showModal();}
 async function resolve(event){event.preventDefault();try{await host({action:'resolve',id:state.resolutionId,note:$('resolution').value});$('reviewDialog').close();await refresh();}catch(e){$('reviewMessage').textContent=e.message;}}
@@ -230,7 +278,7 @@ async function finish(){
     const result=await send({action:'complete'});feedback('success','Reconciliation recorded',UI.time(result.completed_at)+' · Finalize the official audit separately.');
   }catch(e){error(e.message);}
 }
-function switchView(view){state.view=view;for(const [id,key] of [['tabRecent','recent'],['tabFound','found'],['tabReview','review']])$(id).setAttribute('aria-pressed',String(view===key));document.activeElement?.blur();void refresh();}
+function switchView(view){state.view=view;state.offset=0;state.tableSignature=null;for(const [id,key] of [['tabRecent','recent'],['tabFound','found'],['tabReview','review']])$(id).setAttribute('aria-pressed',String(view===key));document.activeElement?.blur();void refresh();}
 $('serial').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();const value=$('serial').value;$('serial').value='';if(value)void capture(value);}};
 $('runButton').onclick=toggleRunning;$('settingsButton').onclick=showSettings;$('settingsClose').onclick=()=>$('settings').close();$('settingsForm').onsubmit=saveSettings;
 $('settings').addEventListener('close',()=>{cancelIdentification();focusScan();});$('modeChoices').onchange=()=>{if(selectedMode()!=='hid')cancelIdentification();updateModeOptions();};$('csvOnly').onchange=updateModeOptions;
@@ -239,7 +287,7 @@ $('identifyButton').onclick=async()=>{try{await host({action:'identify_scanner'}
 $('refreshTabs').onclick=()=>loadTabs().catch(e=>{$('auditInfo').textContent=e.message;});$('connectButton').onclick=connectAudit;
 $('focusButton').onclick=focusScan;$('auditPause').onclick=async()=>{try{await send({action:'pause',value:!state.paused});await refresh();}catch(e){error(e.message);}};
 $('feedbackDetails').onclick=()=>openDetails(state.feedbackSerial);$('detailClose').onclick=closeDetails;$('detailRecord').onchange=renderDetails;$('detailForm').onsubmit=saveDetails;
-$('detailReload').onclick=async()=>{if(!state.drawer)return;const record=state.drawer.records[Number($('detailRecord').value)];if(record)state.drafts.delete(record.file+':'+record.row);const serial=state.drawer.serial;state.drawer=null;await openDetails(serial);};
+$('detailReload').onclick=async()=>{if(!state.drawer)return;const record=state.drawer.records[Number($('detailRecord').value)];if(record){await flushDrafts();const key=draftKey(record);state.drafts.delete(key);state.pendingDrafts.delete(key);await host({action:'draft_delete',key});await refreshDraftSummaries();}const serial=state.drawer.serial;state.drawer=null;await openDetails(serial);};
 $('tabRecent').onclick=()=>switchView('recent');$('tabFound').onclick=()=>switchView('found');$('tabReview').onclick=()=>switchView('review');$('completeButton').onclick=finish;
 $('reviewClose').onclick=()=>$('reviewDialog').close();$('reviewForm').onsubmit=resolve;
 document.addEventListener('keydown',event=>{if(state.identifying&&event.key==='Enter'){event.preventDefault();return;}if(event.key==='F8'){event.preventDefault();focusScan();}if(event.key==='F9'){event.preventDefault();$('auditPause').click();}if(event.key==='Escape'&&!$('detailDrawer').hidden&&!$('settings').open&&!$('reviewDialog').open)closeDetails();});
@@ -256,8 +304,18 @@ browser.runtime.onMessage.addListener(message=>{
     $('login').value=config.username||'';$('voice').checked=options.voice===true;$('csvOnly').checked=options.csvOnly===true;
     document.querySelector('input[name="inputMode"][value="'+(config.input_mode||'station')+'"]').checked=true;
     $('comPort').value=config.port||'COM3';$('baud').value=config.baud||9600;updateModeOptions();
-    await loadDevices();await loadTabs();await refresh();
+    await loadDevices();await loadTabs();await refreshDraftSummaries();await refresh();
     if(!config.username)showSettings();else focusScan();
   }catch(e){error(e.message);}
   setInterval(()=>void refresh(),1000);
 })();
+
+let searchTimer;
+$('historySearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.query=$('historySearch').value.trim();state.offset=0;state.tableSignature=null;void refresh();},220);};
+$('previousPage').onclick=()=>{state.offset=Math.max(0,state.offset-state.pageSize);state.tableSignature=null;void refresh();};
+$('nextPage').onclick=()=>{state.offset+=state.pageSize;state.tableSignature=null;void refresh();};
+$('recoverDraft').onclick=async()=>{const draft=state.draftSummaries[0];if(!draft)return;await openDetails(draft.serial);const index=state.drawer?.records.findIndex(record=>record.file===draft.file&&record.row===draft.row_index);if(index>=0){$('detailRecord').value=index;renderDetails();}};
+document.addEventListener('focusin',()=>{if(state.initialized)updateCapture();});
+window.addEventListener('focus',()=>{if(state.initialized)updateCapture();});
+window.addEventListener('blur',()=>{if(state.initialized)updateCapture();});
+window.addEventListener('beforeunload',event=>{if(state.pendingDrafts.size||state.draftSaving){event.preventDefault();event.returnValue='';}});

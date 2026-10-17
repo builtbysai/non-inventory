@@ -7,7 +7,7 @@ import threading
 import time
 from engine import Ledger
 from runtime import publish,health
-from scanners import raw_input,serial_loop
+from scanners import raw_input,serial_loop,devices
 ROOT=Path(__file__).resolve().parent.parent
 
 def start(force=False):
@@ -47,6 +47,7 @@ def run():
             if os.name=='nt':
                 import winsound
                 winsound.PlaySound('SystemHand',winsound.SND_ALIAS|winsound.SND_ASYNC)
+    device_cache={'at':0,'paths':set()}
     cached={'at':0,'config':{}}
     def get_config():
         if time.monotonic()-cached['at']>.25:
@@ -66,6 +67,20 @@ def run():
             cfg=ledger.config()
             if cfg.get('input_mode','station')=='station':state['input']='Scan field in Firefox'
             elif not cfg.get('capture_enabled',True):state['input']='Capture paused'
+            mode=cfg.get('input_mode','station')
+            reason=''
+            if not cfg.get('username'):reason='Save your operator login in Settings.'
+            elif not cfg.get('capture_enabled',True):reason='Capture is paused.'
+            elif mode=='hid':
+                if time.monotonic()-device_cache['at']>2:
+                    try:device_cache['paths']=set(devices())
+                    except OSError:device_cache['paths']=set()
+                    device_cache['at']=time.monotonic()
+                if not cfg.get('device'):reason='Identify your USB scanner in Settings.'
+                elif cfg['device'] not in device_cache['paths']:reason='Selected USB scanner is disconnected. Reconnect it or identify it again.'
+                elif 'unavailable' in state['input'].lower() or 'error' in state['input'].lower():reason=state['input']
+            elif mode=='com' and state['input']!='COM connected':reason=state['input']
+            state['capture_ready']=not bool(reason);state['capture_reason']=reason
             try:publish(ledger,state)
             except OSError:pass  # A status write must never interrupt capture.
             stop.wait(.2)

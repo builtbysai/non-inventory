@@ -7,3 +7,7 @@ assert.equal(UI.missing({investigation:'found',repeat:1})[0],'Already found');
 assert.match(UI.foundFeedback({investigation:'found',repeat:1,serial:'TEST123'}).message,/Last-seen/);
 assert.deepEqual(UI.changedValues({'Found Notes':'old','Found Location':'Shelf 1'},{'Found Notes':'new','Found Location':'Shelf 1'}),{'Found Notes':'new'});
 console.log('PASS station: relevant mode controls, repeat feedback, and field-level detail patches');
+assert.equal(UI.readiness(true,{username:'test',input_mode:'station'},{},false).ready,false);
+assert.equal(UI.readiness(true,{username:'test',input_mode:'station'},{},true).label,'Ready to scan');
+assert.equal(UI.readiness(true,{username:'test',input_mode:'com'},{input:'COM reconnecting'},true).ready,false);
+assert.equal(UI.readiness(true,{username:'test',input_mode:'hid'},{capture_ready:false,capture_reason:'Disconnected'},true).kind,'warning');

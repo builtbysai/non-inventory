@@ -18,7 +18,9 @@ The old 2.0.x **STOP.cmd** only disabled capture; it did not exit the process. V
 | CSV pending | Close Excel/sync editors. Check the row's error, required headers and available disk space. Pending work retries automatically. |
 | Wrong site / audit paused | Verify the site's selection, sign-in, report filters and manual edits, then reconnect. A journal already bound to a different site needs a separate installation. |
 | Unexpected APEX row | Review manually. Only verified new, unsaved scan-only rows can be removed automatically; persisted/legitimate inventory is never deleted automatically. |
-| Details changed elsewhere | Your draft remains in the panel. Copy any text you need, then **Reload record** to discard the old draft and review current values. |
+| Details changed elsewhere | Your draft remains in the panel. Copy any text you need, then **Discard draft & reload** to discard the old draft and review current values. |
 | Completion blocked | Wait for in-flight work and resolve exceptions against the official page. Reconcile again. |
 
-Details drafts last while the station stays open; save them before closing Firefox. Saved field edits retain a backup and local change history. The form exposes existing Found/Investigation fields plus Notes, Location, Owner and Assigned To when present; it never creates columns.
+Detail drafts autosave into the local journal. Wait for “Draft saved on this computer” before closing Firefox; use Resume details after reopening. Draft saving does not apply changes to CSVs. If a source row moved, the saved text remains available for copying. Saved field edits retain a backup and local change history. The form exposes existing Found/Investigation fields plus Notes, Location, Owner and Assigned To when present; it never creates columns.
+
+Use the history search for a serial or scanned asset ID, and Previous/Next for older records. If the header says Barcode not focused, press F8. Scanner needs attention means the process is running but the chosen device/port is not ready.

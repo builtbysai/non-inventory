@@ -1,13 +1,11 @@
-Non-Inventory 2.1 — follow-up to the working 2.0.x release.
+Non-Inventory 2.2 — stronger recovery and less searching.
 
-- Stop now exits the companion and survives browser reconnections.
-- Status uses SQLite, removing heartbeat-file permission conflicts.
-- Cleaner responsive station: scanning, found items, review and settings are separated.
-- Scanner settings show only relevant controls; USB identification replaces guessing raw device paths.
-- Missing-item repeats display Already found and refresh last-seen without increasing unique-found count.
-- Reads the selected APEX site and blocks site changes instead of assuming SPA1.
-- Optional monthly-record details panel with drafts, field-level conflict protection, backups and edit history.
+- Investigation drafts autosave locally and recover after Firefox restarts. They remain separate from CSV changes until Save details.
+- Search the complete local history by serial or scanned asset ID, with pages for older scans, missing items and review work.
+- Clear readiness feedback for an unfocused barcode field, missing login, disconnected USB scanner or reconnecting COM port.
+- Live table updates preserve keyboard focus instead of freezing after a row action.
+- Details-save retries recognize already-applied changes after a lost acknowledgement, preserving backups and edit history.
 
-Download **non-inventory-2.1.0.zip**. After the current audit, follow the upgrade instructions to preserve your existing workspace. Run SETUP.cmd and reload the temporary Firefox extension. No Mozilla signing is required for temporary use.
+Download **non-inventory-2.2.0.zip** after your current session. Follow the upgrade guide, preserve the entire workspace, run SETUP.cmd and reload the temporary Firefox extension.
 
-Windows/Linux automated checks include actual process stop/restart, native launcher installation, replay recovery, repeat recognition, concurrent detail edits, site-change refusal and simulated APEX responses. Physical-device behavior and authenticated live-page changes still need a short controlled check.
+Windows/Linux checks cover draft restart recovery, read-only protection, history search/pagination, safe edit retries, actual process stop/restart, native launcher installation, CSV replay and simulated APEX responses. Connected-browser tools were unavailable; actual rendering, your scanner and authenticated APEX still need a controlled check. No company data or credentials are included.

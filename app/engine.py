@@ -45,6 +45,7 @@ class Ledger:
               CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS resolutions(id TEXT PRIMARY KEY,note TEXT NOT NULL,at TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS completions(at TEXT PRIMARY KEY,summary TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS drafts(key TEXT PRIMARY KEY,serial TEXT NOT NULL,file TEXT NOT NULL,row_index INTEGER NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS runtime_status(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS detail_edits(id TEXT PRIMARY KEY,at TEXT NOT NULL,username TEXT NOT NULL,file TEXT NOT NULL,serial TEXT NOT NULL,changes TEXT NOT NULL);
               CREATE INDEX IF NOT EXISTS audit_queue ON scans(audit,scanned_at);''')
@@ -245,12 +246,48 @@ class Ledger:
             if serial not in {norm(row.get('Serial Number')),norm(row.get('Asset ID'))}:raise ValueError('Item identity changed; reload the form')
             if set(changes)-set(self.editable(fields)):raise ValueError('These fields are read-only')
             if any(not isinstance(v,str) or len(v)>4000 for v in changes.values()):raise ValueError('Field values must be text up to 4000 characters')
-            if isinstance(expected,dict) and any(k not in expected or row[k]!=expected[k] for k in changes):raise ValueError('An edited field changed since this form opened. Reload the record before saving.')
+            if isinstance(expected,dict) and any(k not in expected or row[k] not in (expected[k],changes[k]) for k in changes):raise ValueError('An edited field changed since this form opened. Reload the record before saving.')
             delta={k:{'before':row[k],'after':v} for k,v in changes.items() if row[k]!=v}
             if delta:
                 row.update(changes);self.store(path,fields,rows,fmt)
                 c.execute('INSERT INTO detail_edits VALUES(?,?,?,?,?,?)',(uuid4().hex,now(),str(username),path.name,serial,json.dumps(delta)))
         return {'ok':True,'updated':len(delta)}
+    def draft_save(self,serial,file,index,payload):
+        serial=norm(serial)
+        record=next((r for r in self.investigation(serial)['records'] if r['file']==file and r['row']==index),None)
+        if record is None:raise ValueError('Investigation row no longer matches; keep your draft and reload the record')
+        if not isinstance(payload,dict):raise ValueError('Invalid draft')
+        original=payload.get('original',{});values=payload.get('values',{})
+        if not isinstance(original,dict) or not isinstance(values,dict) or set(values)-set(record['editable']):raise ValueError('Draft contains read-only fields')
+        if any(not isinstance(v,str) or len(v)>4000 for v in values.values()):raise ValueError('Draft fields must be text up to 4000 characters')
+        original={k:original.get(k,record['values'][k]) for k in values}
+        clean={'version':str(payload.get('version','')),'original':original,'values':values}
+        key=serial+'|'+file+':'+str(index)
+        with self.db_open() as c:
+            if all(original.get(k)==v for k,v in values.items()):c.execute('DELETE FROM drafts WHERE key=?',(key,))
+            else:c.execute('INSERT OR REPLACE INTO drafts VALUES(?,?,?,?,?,?)',(key,serial,file,index,json.dumps(clean),now()))
+        return {'ok':True,'key':key}
+    def drafts(self,serial=None):
+        with self.db_open() as c:
+            if serial is None:return {'ok':True,'drafts':[dict(r) for r in c.execute('SELECT key,serial,file,row_index,updated_at FROM drafts ORDER BY updated_at DESC LIMIT 500')]}
+            return {'ok':True,'drafts':[{**dict(r),'payload':json.loads(r['payload'])} for r in c.execute('SELECT * FROM drafts WHERE serial=? ORDER BY updated_at DESC',(norm(serial),))]}
+    def draft_delete(self,key):
+        with self.db_open() as c:c.execute('DELETE FROM drafts WHERE key=?',(str(key),))
+        return {'ok':True}
+    def history(self,view='recent',query='',offset=0,limit=50):
+        if view not in {'recent','found','review'}:raise ValueError('Unknown history view')
+        offset=max(0,int(offset));limit=max(1,min(100,int(limit)));query=str(query or '').strip()[:120]
+        term='%'+query.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
+        if view=='found':
+            source='observations o';where="(o.serial LIKE ? ESCAPE '\\' OR o.serial IN (SELECT serial FROM scans WHERE raw LIKE ? ESCAPE '\\'))";order='o.last_seen DESC,o.serial';select='o.*'
+        else:
+            source='scans s LEFT JOIN resolutions r ON s.id=r.id';select='s.*,r.note resolution'
+            where="(s.serial LIKE ? ESCAPE '\\' OR s.raw LIKE ? ESCAPE '\\')";order='s.scanned_at DESC,s.rowid DESC'
+            if view=='review':where+=" AND r.id IS NULL AND (s.audit IN ('needs_review','sending','offline','queued','not_in_audit') OR s.csv_state!='done')"
+        with self.db_open() as c:
+            total=c.execute('SELECT COUNT(*) FROM '+source+' WHERE '+where,(term,term)).fetchone()[0]
+            items=[dict(r) for r in c.execute('SELECT '+select+' FROM '+source+' WHERE '+where+' ORDER BY '+order+' LIMIT ? OFFSET ?',(term,term,limit,offset))]
+        return {'ok':True,'items':items,'total':total,'offset':offset,'limit':limit}
     def exceptions(self):
         with self.db_open() as c:return {'ok':True,'exceptions':[dict(r) for r in c.execute("SELECT s.*,r.note resolution FROM scans s LEFT JOIN resolutions r ON r.id=s.id WHERE (s.audit IN ('needs_review','sending','offline','queued','not_in_audit') OR s.csv_state!='done') AND r.id IS NULL ORDER BY s.scanned_at LIMIT 200")]}
     def resolve(self,scanid,note):
@@ -280,6 +317,10 @@ class Ledger:
             if existing and existing['value']!=site['value']:raise ValueError('This journal belongs to '+existing['label']+'. Use a separate installation for a different site.')
             with self.db_open() as c:c.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',('audit_site',json.dumps(site)))
             return {'ok':True}
+        if a=='history':return self.history(r.get('view','recent'),r.get('query',''),r.get('offset',0),r.get('limit',50))
+        if a=='draft_save':return self.draft_save(r.get('serial'),r.get('file'),r.get('row'),r.get('payload'))
+        if a=='drafts':return self.drafts(r.get('serial'))
+        if a=='draft_delete':return self.draft_delete(r.get('key'))
         if a=='status':return self.status()
         if a=='investigation':return self.investigation(r.get('serial'))
         if a=='save_investigation':return self.save_investigation(r.get('serial'),r.get('file'),r.get('row'),r.get('version'),r.get('changes'),r.get('username'),r.get('expected'))
